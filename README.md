@@ -1,89 +1,44 @@
-# Benchmarking Machine Learning Models for HOMO–LUMO Gap Prediction in the tmQM Complex Dataset
+# Cautionary Note on the tmQM Dataset: Unit Mislabeling and the Catastrophic Out-of-Distribution Failure of Non-Spatial Models
 
-This repository contains the dataset preprocessing scripts, model training pipelines, and figure-generation workflows for benchmarking non-spatial machine learning surrogate models on the 2024 release of the tmQM (Transition Metal Quantum Mechanics) dataset.
+This repository contains the dataset preprocessing, model training, and evaluation pipeline for our study on the 2024 release of the tmQM (Transition Metal Quantum Mechanics) dataset. 
+
+**Critical Finding:** We demonstrate that recent literature has significantly inflated the performance of non-spatial machine learning models on this dataset due to target leakage and a unit mislabeling error in the public data file. We provide the corrected, leak-free baseline and expose the catastrophic out-of-distribution (OOD) failure of these models.
 
 ## Dataset
 
 - **Source:** [tmQM 2024 release](https://github.com/uiocompcat/tmqm) — `tmQM/tmQM_y.csv`
 - **Complexes:** 108,541 mononuclear transition metal complexes
-- **Features (5):** `Electronic_E`, `Dispersion_E`, `Dipole_M`, `Metal_q`, `Polarizability`
-- **Target:** `HL_Gap` (HOMO–LUMO gap, eV)
-- **Leakage safeguard:** `HOMO_Energy`, `LUMO_Energy`, `CSD_code`, `SMILES`, and `CSD_years` are excluded from all training features.
+- **Target:** `HL_Gap` (HOMO–LUMO gap)
 
-The 2020 tmQM release (86,665 complexes) was intentionally excluded due to ~86,000 shared CSD codes with the 2024 release. Concatenating the two releases would double-count most complexes and inflate held-out metrics.
+### ⚠️ Critical Unit Correction
+The target variable `HL_Gap` in the public `tmQM_y.csv` is stored in **Hartree**, not electron-volts (eV). Applying a conversion factor of **27.2114** yields physically realistic gaps (median = 2.97 eV, max = 8.36 eV). Failing to apply this conversion results in an artificially deflated Root Mean Square Error (RMSE) by a factor of 27.2. 
 
-## Benchmark Results
+### Feature Sets
+To ensure a completely fair comparison, all models were evaluated on a strictly aligned dataset of $N = 100,831$ valid complexes. We benchmarked two feature sets:
+1. **5 Scalars:** `Electronic_E`, `Dispersion_E`, `Dipole_M`, `Metal_q`, `Polarizability`.
+2. **RDKit 2D:** 14 topological descriptors (e.g., MolWt, LogP, TPSA). Gasteiger charge descriptors were excluded due to incompatibility with transition metals.
 
-| Model Architecture | Test R² | Test RMSE (eV) |
-|---|---|---|
-| Linear Regression Baseline | 0.086 | 0.032 |
-| XGBoost Regressor | 0.271 | 0.029 |
-| **Random Forest Regressor** | **0.334** | **0.027** |
+## Benchmark Results (Aligned Data)
 
-Random Forest used `n_estimators=100`, `random_state=42`, `n_jobs=-1`.
-XGBoost used `n_estimators=100`, `learning_rate=0.1`, `random_state=42`.
-All three models were trained on an identical 80/20 train/test split (`random_state=42`, `test_size=0.2`, `N_test = 21,709`).
+**Random 5-Fold Cross-Validation (In-Distribution)**
+| Features | Model | $R^2$ | RMSE (eV) |
+|---|---|---|---|
+| 5 Scalars | Random Forest | **0.2983** | 0.7595 |
+| 5 Scalars | XGBoost | 0.2712 | 0.7740 |
+| RDKit 2D | Random Forest | **0.3074** | 0.7545 |
+| RDKit 2D | XGBoost | 0.2702 | 0.7746 |
+
+**GroupKFold Validation (Out-of-Distribution by Metal)**
+| Features | Model | $R^2$ | RMSE (eV) |
+|---|---|---|---|
+| 5 Scalars | Random Forest | **0.0946** | 0.8627 |
+| 5 Scalars | XGBoost | 0.1183 | 0.8514 |
+| RDKit 2D | Random Forest | **0.1425** | 0.8396 |
+| RDKit 2D | XGBoost | 0.1465 | 0.8377 |
 
 ### Key Findings
-
-- **Dominant descriptors:** Metal partial charge (`Metal_q`) and total electronic energy (`Electronic_E`) rank as the most influential global scalar features.
-- **Non-linear interactions:** `Metal_q` has weak marginal linear correlation with the target (r = −0.08) but high tree-based importance, reflecting non-linear interaction effects.
-- **Low empirical ceiling:** Global scalar descriptors reach only R² ≈ 0.33, confirming that spatial ligand-field information is required for accurate frontier orbital gap prediction.
-- **Architectural comparison:** Random Forest outperforms XGBoost by ~0.06 R² on this feature set; Linear Regression is far weaker (0.086).
+- **Information Ceiling:** Global scalar descriptors and 14 RDKit descriptors reach an empirical ceiling of $R^2 \approx 0.31$.
+- **OOD Collapse:** When tested on unseen metals (GroupKFold), model performance catastrophically collapses, proving non-spatial models have near-zero extrapolative power.
+- **SHAP Analysis:** Feature importance confirms the models rely on `Polarizability` and `Electronic_E`, exploiting global atomic properties rather than true spatial topology.
 
 ## Repository Structure
-
-```
-├── feature_importance.png          # Random Forest descriptor importance ranking
-├── real_parity_plot.png            # Random Forest parity plot (DFT vs. ML, R² = 0.334)
-├── tmqm_correlation_matrix.png     # Pearson correlation heatmap of scalar descriptors
-├── run_pipeline.py                 # Main execution pipeline (Steps 1–4)
-├── requirements.txt                # Python dependencies
-├── LICENSE
-└── README.md
-```
-
-## Reproducing the Results
-
-```bash
-pip install -r requirements.txt
-python run_pipeline.py
-```
-
-The pipeline will:
-
-1. Clone the tmQM repository (2024 release)
-2. Load and clean `tmQM_y.csv`
-3. Train Linear Regression, XGBoost, and Random Forest
-4. Print benchmark metrics to stdout
-5. Generate the three figures listed above
-
-If the tmQM repository cannot be cloned, the pipeline raises an exception and exits — it never substitutes synthetic or fallback data.
-
-## Requirements
-
-See `requirements.txt`. Core dependencies: `numpy`, `pandas`, `scikit-learn`, `xgboost`, `matplotlib`, `seaborn`.
-
-## Citation
-
-If you use this code, please cite:
-
-> Kashan. *Benchmarking Machine Learning Models for HOMO–LUMO Gap Prediction in the tmQM Complex Dataset.* (in review).
-
-## Figures
-
-### Feature Correlation Matrix
-
-![Feature correlation matrix](tmqm_correlation_matrix.png)
-
-### Random Forest Feature Importance
-
-![Random Forest feature importance](feature_importance.png)
-
-### Random Forest Parity Plot
-
-![Random Forest parity plot](real_parity_plot.png)
-
-## License
-
-See LICENSE file.
