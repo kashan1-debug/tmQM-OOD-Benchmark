@@ -1,210 +1,154 @@
 #!/usr/bin/env python3
 """
-Benchmarking ML models for HOMO-LUMO gap prediction on the tmQM 2024 dataset.
-
-This pipeline is intentionally strict:
-  - It uses only the 2024 tmQM release (108,541 unique complexes).
-  - It fails loudly if the tmQM repository cannot be cloned.
-  - It never substitutes synthetic or fallback data.
-  - It excludes all columns that could leak target information.
-
-Outputs:
-  results.csv                    - benchmark R2 and RMSE for each model
-  tmqm_correlation_matrix.png    - Pearson correlation heatmap
-  feature_importance.png         - Random Forest descriptor ranking (sorted)
-  real_parity_plot.png           - Random Forest parity plot (DFT vs. ML)
+Quantifying the Applicability Domain of Non-Spatial ML Models on tmQM.
+Main execution pipeline.
 """
 
 import os
-import sys
+import re
+import warnings
 import subprocess
-
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import seaborn as sns
+import shap
 
-from sklearn.model_selection import train_test_split
-from sklearn.linear_model import LinearRegression
+from sklearn.model_selection import KFold, GroupKFold, cross_val_predict, train_test_split
+from sklearn.linear_model import Ridge
 from sklearn.ensemble import RandomForestRegressor
+from sklearn.dummy import DummyRegressor
 from sklearn.metrics import r2_score, root_mean_squared_error
+from xgboost import XGBRegressor
+from rdkit import Chem, RDLogger
+from rdkit.Chem import Descriptors, rdMolDescriptors
 
-try:
-    from xgboost import XGBRegressor
-    HAS_XGB = True
-except ImportError:
-    HAS_XGB = False
-    print("WARNING: xgboost not installed. Run: pip install xgboost")
+RDLogger.DisableLog("rdApp.*")
+warnings.filterwarnings("ignore")
 
+PROJECT_DIR = "./"
+UNIT_FACTOR = 27.2114
+SCALAR_FEATURES = ["Electronic_E", "Dispersion_E", "Dipole_M", "Metal_q", "Polarizability"]
 
-# ======================================================================
-# Step 1 — Clone and load the tmQM 2024 release
-# ======================================================================
-REPO_DIR = "tmqm"
-CSV_PATH = os.path.join(REPO_DIR, "tmQM", "tmQM_y.csv")
+def clone_dataset():
+    if not os.path.exists("tmqm"):
+        print("Cloning tmQM repository...")
+        result = subprocess.run(["git", "clone", "--depth", "1", "https://github.com/uiocompcat/tmqm.git", "tmqm"])
+        if result.returncode != 0:
+            raise RuntimeError("Failed to clone tmQM repository.")
 
-if not os.path.exists(REPO_DIR):
-    print("Cloning tmQM repository ...")
-    result = subprocess.run(
-        ["git", "clone", "--depth", "1",
-         "https://github.com/uiocompcat/tmqm.git", REPO_DIR],
-    )
-    if result.returncode != 0:
-        sys.exit("ERROR: git clone failed. Refusing to continue without real data.")
+def load_and_preprocess():
+    print("Loading tmQM data...")
+    df = pd.read_csv("tmqm/tmQM/tmQM_y.csv", sep=";")
+    
+    def extract_metal(smi):
+        if not isinstance(smi, str): return "UNKNOWN"
+        METALS = {"Sc","Ti","V","Cr","Mn","Fe","Co","Ni","Cu","Zn","Y","Zr","Nb","Mo","Tc","Ru","Rh","Pd","Ag","Cd","Hf","Ta","W","Re","Os","Ir","Pt","Au","Hg","La","Ce","Pr","Nd","Sm","Eu","Gd","Tb","Dy","Ho","Er","Tm","Yb","Lu"}
+        for m in re.finditer(r"\[([A-Z][a-z]?)", smi):
+            if m.group(1) in METALS: return m.group(1)
+        for m in re.finditer(r"[A-Z][a-z]?", smi):
+            if m.group(0) in METALS: return m.group(0)
+        return "UNKNOWN"
 
-if not os.path.exists(CSV_PATH):
-    sys.exit(f"ERROR: expected data file not found at {CSV_PATH}.")
+    df["Metal"] = df["SMILES"].map(extract_metal)
+    valid_mask = df[SCALAR_FEATURES].notna().all(axis=1) & df["SMILES"].notna() & df["HL_Gap"].notna()
+    df_clean = df[valid_mask].reset_index(drop=True)
 
-df = pd.read_csv(CSV_PATH, sep=";")
-print(f"Loaded tmQM 2024 release: {len(df):,} rows, {df.shape[1]} columns")
+    # Apply Hartree to eV conversion
+    y = df_clean["HL_Gap"] * UNIT_FACTOR
+    metal = df_clean["Metal"].values
+    X_scalar_full = df_clean[SCALAR_FEATURES].astype(float)
+    
+    return df_clean, X_scalar_full, y, metal
 
+def compute_rdkit_descriptors(df_clean):
+    def smiles_to_desc(smi):
+        mol = Chem.MolFromSmiles(smi)
+        if mol is None: return None
+        try:
+            vals = [
+                Descriptors.MolWt(mol), Descriptors.MolLogP(mol), Descriptors.TPSA(mol),
+                Descriptors.NumHDonors(mol), Descriptors.NumHAcceptors(mol),
+                Descriptors.NumRotatableBonds(mol), rdMolDescriptors.CalcNumRings(mol),
+                rdMolDescriptors.CalcNumAromaticRings(mol), mol.GetNumHeavyAtoms(),
+                Descriptors.FractionCSP3(mol), Descriptors.NumValenceElectrons(mol),
+                rdMolDescriptors.CalcNumHeteroatoms(mol), rdMolDescriptors.CalcNumSaturatedRings(mol),
+                rdMolDescriptors.CalcNumAliphaticRings(mol)
+            ]
+            for v in vals:
+                if v is None or not np.isfinite(v): return None
+            return vals
+        except:
+            return None
 
-# ======================================================================
-# Step 2 — Explicit feature/target split (no leakage)
-# ======================================================================
-FEATURES = ["Electronic_E", "Dispersion_E", "Dipole_M", "Metal_q", "Polarizability"]
-TARGET   = "HL_Gap"
+    print("\nComputing RDKit descriptors (~10 mins)...")
+    desc_rows, desc_idx = [], []
+    for i, smi in enumerate(df_clean["SMILES"].tolist()):
+        d = smiles_to_desc(smi)
+        if d is not None:
+            desc_rows.append(d)
+            desc_idx.append(i)
+        if (i + 1) % 20000 == 0:
+            print(f"  scanned {i+1:,}/{len(df_clean):,}   kept {len(desc_rows):,}")
+            
+    return pd.DataFrame(desc_rows).astype(float), desc_idx
 
-missing = [c for c in FEATURES + [TARGET] if c not in df.columns]
-if missing:
-    sys.exit(f"ERROR: missing expected columns: {missing}")
+def get_models():
+    return {
+        "Dummy": DummyRegressor(strategy="mean"),
+        "Ridge": Ridge(alpha=1.0),
+        "Random Forest": RandomForestRegressor(n_estimators=100, max_depth=15, random_state=42, n_jobs=-1),
+        "XGBoost": XGBRegressor(n_estimators=200, learning_rate=0.05, max_depth=6, n_jobs=-1, tree_method="hist"),
+    }
 
-X = df[FEATURES].apply(pd.to_numeric, errors="coerce")
-y = pd.to_numeric(df[TARGET], errors="coerce")
+def run_cv(split_label, feature_label, X, y_, cv, groups, results):
+    print(f"\n=== {split_label} | {feature_label} (n={len(y_):,}) ===")
+    for name, model in get_models().items():
+        kw = {"groups": groups} if groups is not None else {}
+        yp = cross_val_predict(model, X, y_, cv=cv, n_jobs=-1, **kw)
+        r2, rmse = r2_score(y_, yp), root_mean_squared_error(y_, yp)
+        results.append({"Split": split_label, "Features": feature_label, "Model": name, "R2": r2, "RMSE": rmse})
+        print(f"  {name:14s} R2={r2: .4f}  RMSE={rmse: .4f}")
 
-mask = X.notna().all(axis=1) & y.notna()
-X = X[mask].reset_index(drop=True)
-y = y[mask].reset_index(drop=True)
+def generate_shap(X_scalar, y_clean):
+    print("\nGenerating SHAP values...")
+    X_train, X_test, y_train, y_test = train_test_split(X_scalar, y_clean, test_size=0.2, random_state=42)
+    model = XGBRegressor(n_estimators=100, max_depth=6, n_jobs=-1).fit(X_train, y_train)
+    explainer = shap.TreeExplainer(model)
+    shap_values = explainer.shap_values(X_test.sample(n=1000, random_state=42))
+    
+    plt.figure()
+    shap.summary_plot(shap_values, X_test.sample(n=1000, random_state=42), show=False)
+    plt.tight_layout()
+    plt.savefig(os.path.join(PROJECT_DIR, "shap_summary_final.png"), dpi=300)
+    plt.close()
+    print("Saved shap_summary_final.png")
 
-print(f"Features ({len(FEATURES)}): {FEATURES}")
-print(f"Target:                {TARGET}")
-print(f"Final dataset: X={X.shape}  y={y.shape}")
+def main():
+    clone_dataset()
+    df_clean, X_scalar_full, y, metal = load_and_preprocess()
+    
+    X_rdkit, desc_idx = compute_rdkit_descriptors(df_clean)
+    y_clean = y.loc[desc_idx].reset_index(drop=True)
+    metal_clean = pd.Series(metal).loc[desc_idx].reset_index(drop=True)
+    X_scalar = X_scalar_full.loc[desc_idx].reset_index(drop=True)
+    
+    print(f"\nAligned Dataset Size: {len(y_clean):,}")
 
+    results = []
+    kf = KFold(n_splits=5, shuffle=True, random_state=42)
+    gkf = GroupKFold(n_splits=5)
 
-# ======================================================================
-# Step 3 — Train models
-# ======================================================================
-X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=0.2, random_state=42
-)
-print(f"Train rows: {len(X_train):,}   Test rows: {len(X_test):,}")
+    run_cv("random", "5 Scalars", X_scalar, y_clean, kf, None, results)
+    run_cv("random", "RDKit 2D", X_rdkit, y_clean, kf, None, results)
 
-models = {
-    "Linear Regression Baseline": LinearRegression(),
-    "Random Forest Regressor":    RandomForestRegressor(
-                                      n_estimators=100,
-                                      random_state=42,
-                                      n_jobs=-1,
-                                  ),
-}
-if HAS_XGB:
-    models["XGBoost Regressor"] = XGBRegressor(
-        n_estimators=100,
-        learning_rate=0.1,
-        random_state=42,
-        n_jobs=-1,
-    )
+    ms = metal_clean != "UNKNOWN"
+    run_cv("grouped", "5 Scalars", X_scalar[ms], y_clean[ms], gkf, metal_clean[ms], results)
+    run_cv("grouped", "RDKit 2D", X_rdkit[ms], y_clean[ms], gkf, metal_clean[ms], results)
 
-results = []
-preds = {}
+    pd.DataFrame(results).to_csv(os.path.join(PROJECT_DIR, "results_final.csv"), index=False)
+    print("\nSaved results_final.csv")
+    
+    generate_shap(X_scalar, y_clean)
 
-for name, model in models.items():
-    print(f"Training: {name} ...")
-    model.fit(X_train, y_train)
-    y_pred = model.predict(X_test)
-    preds[name] = y_pred
-    results.append({
-        "Model": name,
-        "R2":    r2_score(y_test, y_pred),
-        "RMSE":  root_mean_squared_error(y_test, y_pred),
-    })
-
-results_df = pd.DataFrame(results).sort_values("R2", ascending=False)
-
-print()
-print("=" * 60)
-print("BENCHMARK PERFORMANCE RESULTS")
-print("=" * 60)
-print(results_df.to_string(index=False, float_format=lambda v: f"{v:.6f}"))
-print()
-
-results_df.to_csv("results.csv", index=False)
-print("Saved: results.csv")
-
-
-# ======================================================================
-# Step 4 — Figures
-# ======================================================================
-sns.set_theme(style="ticks")
-plt.rcParams.update({
-    "font.family":       "sans-serif",
-    "font.weight":       "bold",
-    "axes.labelweight":  "bold",
-    "axes.titleweight":  "bold",
-    "axes.edgecolor":    "#000000",
-    "axes.linewidth":    1.0,
-})
-
-# ---- 4a. Correlation matrix -----------------------------------------
-plt.figure(figsize=(10, 6))
-sns.heatmap(
-    pd.concat([X, y], axis=1).corr(),
-    annot=True, cmap="coolwarm", fmt=".2f", linewidths=0.5,
-)
-plt.title("tmQM Feature Correlation Matrix", fontsize=14)
-plt.tight_layout()
-plt.savefig("tmqm_correlation_matrix.png", dpi=300)
-plt.close()
-print("Saved: tmqm_correlation_matrix.png")
-
-# ---- 4b. Feature importance (sorted descending) ----------------------
-rf = models["Random Forest Regressor"]
-importances = pd.Series(rf.feature_importances_, index=FEATURES).sort_values()
-plt.figure(figsize=(8, 4))
-plt.barh(importances.index, importances.values, color="teal")
-plt.xlabel("Feature Importance Weight")
-plt.title("Random Forest Descriptor Ranking")
-plt.tight_layout()
-plt.savefig("feature_importance.png", dpi=300)
-plt.close()
-print("Saved: feature_importance.png")
-
-# ---- 4c. Random Forest parity plot ----------------------------------
-y_pred_rf = preds["Random Forest Regressor"]
-r2_rf = r2_score(y_test, y_pred_rf)
-
-fig, ax = plt.subplots(figsize=(3.5, 3.2), dpi=300)
-ax.scatter(
-    y_test, y_pred_rf,
-    color="#1f77b4", alpha=0.50, s=16,
-    edgecolors="black", linewidths=0.2, rasterized=True,
-)
-lo = min(y_test.min(), y_pred_rf.min())
-hi = max(y_test.max(), y_pred_rf.max())
-ax.plot([lo, hi], [lo, hi], color="#d62728", linestyle="--",
-        linewidth=1.8, label=r"$\mathbf{Ideal\ Fit}$", zorder=5)
-ax.text(
-    0.05, 0.90,
-    rf"$\mathbf{{R^2 = {r2_rf:.3f}}}$",
-    transform=ax.transAxes, fontsize=9, fontweight="bold",
-    verticalalignment="top",
-    bbox=dict(boxstyle="square,pad=0.3", facecolor="white",
-              edgecolor="#000000", linewidth=0.8, alpha=0.95),
-)
-ax.set_xlabel("DFT HOMO-LUMO Gap (eV)", fontsize=9, fontweight="bold", labelpad=6)
-ax.set_ylabel("RF Predicted Gap (eV)", fontsize=9, fontweight="bold", labelpad=6)
-ax.set_title("Random Forest Parity", fontsize=10, fontweight="bold", pad=8)
-ax.tick_params(axis="both", which="major", labelsize=8, width=1.0, length=4)
-ax.grid(True, linestyle=":", alpha=0.5, color="#888888")
-ax.legend(loc="lower right", frameon=True, facecolor="white",
-          framealpha=0.9, prop={"weight": "bold", "size": 8})
-for spine in ax.spines.values():
-    spine.set_linewidth(1.0)
-    spine.set_color("#000000")
-plt.tight_layout()
-plt.savefig("real_parity_plot.png", dpi=300, bbox_inches="tight")
-plt.close()
-print("Saved: real_parity_plot.png")
-
-print()
-print("Pipeline execution complete.")
+if __name__ == "__main__":
+    main()
