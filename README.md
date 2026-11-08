@@ -121,16 +121,17 @@ python run_pipeline.py
 
 <hr>
 
-<h2>🖼️ Publication Figures</h2>
+## 🖼️ Publication Figures
 
-<h3>Corrected Gap Distribution</h3>
-<p><em>The physically realistic distribution of gaps (1-8 eV) confirms the unit conversion.</em></p>
-<p><img src="https://github.com/kashan1-debug/tmQM-OOD-Benchmark/blob/main/gap_distribution.png?raw=true" alt="Gap Distribution" width="700"></p>
+### Corrected Gap Distribution
+*The physically realistic distribution of gaps (1-8 eV) confirms the unit conversion.*
+![Gap Distribution](gap_distribution.png)
 
-<h3>Random Forest Parity Plot</h3>
-<p><em>The model fails to predict extreme gaps (> 5 eV) and collapses to the mean (R² = 0.305).</em></p>
-<p><img src="https://github.com/kashan1-debug/tmQM-OOD-Benchmark/blob/main/parity_plot_final.png?raw=true" alt="Parity Plot" width="600"></p>
+### Random Forest Parity Plot
+*The model fails to predict extreme gaps (> 5 eV) and collapses to the mean (R² = 0.305).*
+![Parity Plot](parity_plot_final.png)
 
-<h3>SHAP Feature Importance</h3>
-<p><em>SHAP confirms the model relies on global atomic properties (Polarizability, Electronic_E) rather than local geometry.</em></p>
+### SHAP Feature Importance
+*SHAP confirms the model relies on global atomic properties (`Polarizability`, `Electronic_E`) rather than local geometry.*
+![SHAP Summary](shap_summary_final.png)
 <p><img src="https://github.com/kashan1-debug/tmQM-OOD-Benchmark/blob/main/shap_summary_final.png?raw=true" alt="SHAP Summary" width="900"></p>
