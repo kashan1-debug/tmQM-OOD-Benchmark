@@ -25,19 +25,21 @@ from rdkit.Chem import Descriptors, rdMolDescriptors
 RDLogger.DisableLog("rdApp.*")
 warnings.filterwarnings("ignore")
 
-PROJECT_DIR = "./"
+PROJECT_DIR = os.getcwd()
 UNIT_FACTOR = 27.2114
 SCALAR_FEATURES = ["Electronic_E", "Dispersion_E", "Dipole_M", "Metal_q", "Polarizability"]
 
-def clone_dataset():
+def download_dataset():
     if not os.path.exists("tmqm"):
-        print("Cloning tmQM repository...")
+        print("Cloning tmQM repository (2024 release)...")
         result = subprocess.run(["git", "clone", "--depth", "1", "https://github.com/uiocompcat/tmqm.git", "tmqm"])
         if result.returncode != 0:
-            raise RuntimeError("Failed to clone tmQM repository.")
+            raise RuntimeError("Failed to clone tmQM.")
+    else:
+        print("tmQM repository already exists.")
 
-def load_and_preprocess():
-    print("Loading tmQM data...")
+def load_and_clean_data():
+    print("\nLoading and cleaning dataset...")
     df = pd.read_csv("tmqm/tmQM/tmQM_y.csv", sep=";")
     
     def extract_metal(smi):
@@ -53,7 +55,6 @@ def load_and_preprocess():
     valid_mask = df[SCALAR_FEATURES].notna().all(axis=1) & df["SMILES"].notna() & df["HL_Gap"].notna()
     df_clean = df[valid_mask].reset_index(drop=True)
 
-    # Apply Hartree to eV conversion
     y = df_clean["HL_Gap"] * UNIT_FACTOR
     metal = df_clean["Metal"].values
     X_scalar_full = df_clean[SCALAR_FEATURES].astype(float)
@@ -103,31 +104,72 @@ def get_models():
 def run_cv(split_label, feature_label, X, y_, cv, groups, results):
     print(f"\n=== {split_label} | {feature_label} (n={len(y_):,}) ===")
     for name, model in get_models().items():
-        kw = {"groups": groups} if groups is not None else {}
-        yp = cross_val_predict(model, X, y_, cv=cv, n_jobs=-1, **kw)
+        # Safely pass groups only if they exist
+        if groups is not None:
+            yp = cross_val_predict(model, X, y_, cv=cv, groups=groups, n_jobs=-1)
+        else:
+            yp = cross_val_predict(model, X, y_, cv=cv, n_jobs=-1)
+            
         r2, rmse = r2_score(y_, yp), root_mean_squared_error(y_, yp)
         results.append({"Split": split_label, "Features": feature_label, "Model": name, "R2": r2, "RMSE": rmse})
         print(f"  {name:14s} R2={r2: .4f}  RMSE={rmse: .4f}")
 
-def generate_shap(X_scalar, y_clean):
-    print("\nGenerating SHAP values...")
-    X_train, X_test, y_train, y_test = train_test_split(X_scalar, y_clean, test_size=0.2, random_state=42)
-    model = XGBRegressor(n_estimators=100, max_depth=6, n_jobs=-1).fit(X_train, y_train)
-    explainer = shap.TreeExplainer(model)
-    shap_values = explainer.shap_values(X_test.sample(n=1000, random_state=42))
+def generate_figures(X_scalar, y_clean):
+    print("\nGenerating figures...")
     
-    plt.figure()
-    shap.summary_plot(shap_values, X_test.sample(n=1000, random_state=42), show=False)
+    # 1. Gap Distribution Plot
+    plt.figure(figsize=(7, 4), dpi=300)
+    plt.hist(y_clean, bins=60, color="teal", edgecolor="black", alpha=0.7)
+    plt.xlabel("HOMO-LUMO Gap (eV)", fontweight='bold')
+    plt.ylabel("Frequency", fontweight='bold')
+    plt.title("Distribution of HOMO-LUMO Gaps (tmQM 2024)", fontweight='bold')
+    plt.tight_layout()
+    plt.savefig(os.path.join(PROJECT_DIR, "gap_distribution.png"), dpi=300)
+    plt.close()
+    print("  Saved gap_distribution.png")
+
+    # 2. Parity Plot (Random Forest, 5 Scalars)
+    X_train, X_test, y_train, y_test = train_test_split(X_scalar, y_clean, test_size=0.2, random_state=42)
+    rf = RandomForestRegressor(n_estimators=100, max_depth=15, random_state=42, n_jobs=-1)
+    rf.fit(X_train, y_train)
+    y_pred = rf.predict(X_test)
+    r2 = r2_score(y_test, y_pred)
+    
+    plt.figure(figsize=(5, 5), dpi=300)
+    plt.scatter(y_test, y_pred, s=10, alpha=0.3, edgecolors="none", color="#1f77b4")
+    lo, hi = min(y_test.min(), y_pred.min()), max(y_test.max(), y_pred.max())
+    plt.plot([lo, hi], [lo, hi], "r--", lw=1.5, label="Ideal Fit")
+    plt.text(0.05, 0.9, f"R² = {r2:.3f}", transform=plt.gca().transAxes,
+             fontsize=11, fontweight='bold', bbox=dict(facecolor="white", edgecolor="black"))
+    plt.xlabel("DFT HOMO-LUMO Gap (eV)", fontweight='bold')
+    plt.ylabel("Predicted Gap (eV)", fontweight='bold')
+    plt.title("Random Forest Parity Plot", fontweight='bold')
+    plt.legend(loc="lower right")
+    plt.tight_layout()
+    plt.savefig(os.path.join(PROJECT_DIR, "parity_plot_final.png"), dpi=300)
+    plt.close()
+    print("  Saved parity_plot_final.png")
+
+    # 3. SHAP Plot (XGBoost, 5 Scalars)
+    print("  Generating SHAP values...")
+    xgb = XGBRegressor(n_estimators=100, max_depth=6, n_jobs=-1).fit(X_train, y_train)
+    explainer = shap.TreeExplainer(xgb)
+    X_sample = X_test.sample(n=1000, random_state=42) # Fixed sample variable
+    shap_values = explainer.shap_values(X_sample)
+    
+    plt.figure(figsize=(8, 5), dpi=300)
+    shap.summary_plot(shap_values, X_sample, show=False)
     plt.tight_layout()
     plt.savefig(os.path.join(PROJECT_DIR, "shap_summary_final.png"), dpi=300)
     plt.close()
-    print("Saved shap_summary_final.png")
+    print("  Saved shap_summary_final.png")
 
 def main():
-    clone_dataset()
-    df_clean, X_scalar_full, y, metal = load_and_preprocess()
+    download_dataset()
+    df_clean, X_scalar_full, y, metal = load_and_clean_data()
     
     X_rdkit, desc_idx = compute_rdkit_descriptors(df_clean)
+    
     y_clean = y.loc[desc_idx].reset_index(drop=True)
     metal_clean = pd.Series(metal).loc[desc_idx].reset_index(drop=True)
     X_scalar = X_scalar_full.loc[desc_idx].reset_index(drop=True)
@@ -145,10 +187,17 @@ def main():
     run_cv("grouped", "5 Scalars", X_scalar[ms], y_clean[ms], gkf, metal_clean[ms], results)
     run_cv("grouped", "RDKit 2D", X_rdkit[ms], y_clean[ms], gkf, metal_clean[ms], results)
 
-    pd.DataFrame(results).to_csv(os.path.join(PROJECT_DIR, "results_final.csv"), index=False)
+    results_df = pd.DataFrame(results)
+    results_df.to_csv(os.path.join(PROJECT_DIR, "results_final.csv"), index=False)
+    
+    print("\n--- FINAL RESULTS ---")
+    # Fixed print format to avoid crashing on string columns
+    print(results_df.round(4).to_string(index=False))
     print("\nSaved results_final.csv")
     
-    generate_shap(X_scalar, y_clean)
+    generate_figures(X_scalar, y_clean)
+    
+    print("\nPipeline complete.")
 
 if __name__ == "__main__":
     main()
