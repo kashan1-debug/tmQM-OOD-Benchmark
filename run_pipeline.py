@@ -2,12 +2,13 @@
 """
 Quantifying the Applicability Domain of Non-Spatial ML Models on tmQM.
 Main execution pipeline.
+
+Fully self-contained. Clones data, preprocesses, evaluates, and generates figures.
 """
 
 import os
 import re
 import warnings
-import subprocess
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -22,6 +23,7 @@ from xgboost import XGBRegressor
 from rdkit import Chem, RDLogger
 from rdkit.Chem import Descriptors, rdMolDescriptors
 
+# --- Configuration ---
 RDLogger.DisableLog("rdApp.*")
 warnings.filterwarnings("ignore")
 
@@ -32,9 +34,11 @@ SCALAR_FEATURES = ["Electronic_E", "Dispersion_E", "Dipole_M", "Metal_q", "Polar
 def download_dataset():
     if not os.path.exists("tmqm"):
         print("Cloning tmQM repository (2024 release)...")
-        result = subprocess.run(["git", "clone", "--depth", "1", "https://github.com/uiocompcat/tmqm.git", "tmqm"])
-        if result.returncode != 0:
-            raise RuntimeError("Failed to clone tmQM.")
+        # Using os.system guarantees the progress bar streams to the console (no deadlocks)
+        exit_code = os.system("git clone --depth 1 https://github.com/uiocompcat/tmqm.git tmqm")
+        if exit_code != 0:
+            raise RuntimeError("Failed to clone tmQM. Check your internet connection.")
+        print("Download complete.")
     else:
         print("tmQM repository already exists.")
 
@@ -103,14 +107,19 @@ def get_models():
 
 def run_cv(split_label, feature_label, X, y_, cv, groups, results):
     print(f"\n=== {split_label} | {feature_label} (n={len(y_):,}) ===")
+    
+    # FORCE STRICT ALIGNMENT: Reset index to prevent scikit-learn indexing errors
+    X_aligned = X.reset_index(drop=True)
+    y_aligned = pd.Series(y_).reset_index(drop=True)
+    groups_aligned = pd.Series(groups).reset_index(drop=True) if groups is not None else None
+
     for name, model in get_models().items():
-        # Safely pass groups only if they exist
-        if groups is not None:
-            yp = cross_val_predict(model, X, y_, cv=cv, groups=groups, n_jobs=-1)
+        if groups_aligned is not None:
+            yp = cross_val_predict(model, X_aligned, y_aligned, cv=cv, groups=groups_aligned, n_jobs=-1)
         else:
-            yp = cross_val_predict(model, X, y_, cv=cv, n_jobs=-1)
+            yp = cross_val_predict(model, X_aligned, y_aligned, cv=cv, n_jobs=-1)
             
-        r2, rmse = r2_score(y_, yp), root_mean_squared_error(y_, yp)
+        r2, rmse = r2_score(y_aligned, yp), root_mean_squared_error(y_aligned, yp)
         results.append({"Split": split_label, "Features": feature_label, "Model": name, "R2": r2, "RMSE": rmse})
         print(f"  {name:14s} R2={r2: .4f}  RMSE={rmse: .4f}")
 
@@ -128,7 +137,7 @@ def generate_figures(X_scalar, y_clean):
     plt.close()
     print("  Saved gap_distribution.png")
 
-    # 2. Parity Plot (Random Forest, 5 Scalars)
+    # 2. Parity Plot
     X_train, X_test, y_train, y_test = train_test_split(X_scalar, y_clean, test_size=0.2, random_state=42)
     rf = RandomForestRegressor(n_estimators=100, max_depth=15, random_state=42, n_jobs=-1)
     rf.fit(X_train, y_train)
@@ -150,11 +159,11 @@ def generate_figures(X_scalar, y_clean):
     plt.close()
     print("  Saved parity_plot_final.png")
 
-    # 3. SHAP Plot (XGBoost, 5 Scalars)
+    # 3. SHAP Plot
     print("  Generating SHAP values...")
     xgb = XGBRegressor(n_estimators=100, max_depth=6, n_jobs=-1).fit(X_train, y_train)
     explainer = shap.TreeExplainer(xgb)
-    X_sample = X_test.sample(n=1000, random_state=42) # Fixed sample variable
+    X_sample = X_test.sample(n=1000, random_state=42)
     shap_values = explainer.shap_values(X_sample)
     
     plt.figure(figsize=(8, 5), dpi=300)
@@ -170,6 +179,7 @@ def main():
     
     X_rdkit, desc_idx = compute_rdkit_descriptors(df_clean)
     
+    # STRICT ALIGNMENT
     y_clean = y.loc[desc_idx].reset_index(drop=True)
     metal_clean = pd.Series(metal).loc[desc_idx].reset_index(drop=True)
     X_scalar = X_scalar_full.loc[desc_idx].reset_index(drop=True)
@@ -183,15 +193,15 @@ def main():
     run_cv("random", "5 Scalars", X_scalar, y_clean, kf, None, results)
     run_cv("random", "RDKit 2D", X_rdkit, y_clean, kf, None, results)
 
+    # EXPLICIT MASK FOR GROUPED CV
     ms = metal_clean != "UNKNOWN"
-    run_cv("grouped", "5 Scalars", X_scalar[ms], y_clean[ms], gkf, metal_clean[ms], results)
-    run_cv("grouped", "RDKit 2D", X_rdkit[ms], y_clean[ms], gkf, metal_clean[ms], results)
+    run_cv("grouped", "5 Scalars", X_scalar[ms].reset_index(drop=True), y_clean[ms].reset_index(drop=True), gkf, metal_clean[ms].reset_index(drop=True), results)
+    run_cv("grouped", "RDKit 2D", X_rdkit[ms].reset_index(drop=True), y_clean[ms].reset_index(drop=True), gkf, metal_clean[ms].reset_index(drop=True), results)
 
     results_df = pd.DataFrame(results)
     results_df.to_csv(os.path.join(PROJECT_DIR, "results_final.csv"), index=False)
     
     print("\n--- FINAL RESULTS ---")
-    # Fixed print format to avoid crashing on string columns
     print(results_df.round(4).to_string(index=False))
     print("\nSaved results_final.csv")
     
