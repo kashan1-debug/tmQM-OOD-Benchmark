@@ -6,7 +6,7 @@
 ## 📖 Citation
 If you use this code or the corrected data alignment in your research, please cite our paper:
 
-> **Kashan.** *Quantifying the Applicability Domain of Non-Spatial Machine Learning Models for HOMO–LUMO Gap Prediction on the tmQM Dataset.* (in preparation, 2024).
+> **Muhammad Kashan Ali.** *Quantifying the Applicability Domain of Non-Spatial Machine Learning Models for HOMO–LUMO Gap Prediction on the tmQM Dataset.* (in preparation, 2024).
 
 ---
 
