@@ -132,6 +132,4 @@ python run_pipeline.py
 ![Parity Plot](parity_plot_final.png)
 
 ### SHAP Feature Importance
-*SHAP confirms the model relies on global atomic properties (`Polarizability`, `Electronic_E`) rather than local geometry.*
-![SHAP Summary](shap_summary_final.png)
 <p><img src="https://github.com/kashan1-debug/tmQM-OOD-Benchmark/blob/main/shap_summary_final.png?raw=true" alt="SHAP Summary" width="900"></p>
