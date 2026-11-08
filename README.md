@@ -28,20 +28,74 @@ This repository contains the data preprocessing, model training, and evaluation 
 ## 🏆 Benchmark Results
 
 **Random 5-Fold Cross-Validation (In-Distribution)**
-| Features | Model | R² | RMSE (eV) |
-|---|---|---|---|
-| 5 Scalars | Random Forest | **0.2983** | 0.7595 |
-| 5 Scalars | XGBoost | 0.2712 | 0.7740 |
-| RDKit 2D | Random Forest | **0.3074** | 0.7545 |
-| RDKit 2D | XGBoost | 0.2702 | 0.7746 |
+
+<table>
+  <tr>
+    <th>Features</th>
+    <th>Model</th>
+    <th>R²</th>
+    <th>RMSE (eV)</th>
+  </tr>
+  <tr>
+    <td>5 Scalars</td>
+    <td>Random Forest</td>
+    <td><b>0.2983</b></td>
+    <td>0.7595</td>
+  </tr>
+  <tr>
+    <td>5 Scalars</td>
+    <td>XGBoost</td>
+    <td>0.2712</td>
+    <td>0.7740</td>
+  </tr>
+  <tr>
+    <td>RDKit 2D</td>
+    <td>Random Forest</td>
+    <td><b>0.3074</b></td>
+    <td>0.7545</td>
+  </tr>
+  <tr>
+    <td>RDKit 2D</td>
+    <td>XGBoost</td>
+    <td>0.2702</td>
+    <td>0.7746</td>
+  </tr>
+</table>
 
 **GroupKFold Validation (Out-of-Distribution by Metal)**
-| Features | Model | R² | RMSE (eV) |
-|---|---|---|---|
-| 5 Scalars | Random Forest | **0.0946** | 0.8627 |
-| 5 Scalars | XGBoost | 0.1183 | 0.8514 |
-| RDKit 2D | Random Forest | **0.1425** | 0.8396 |
-| RDKit 2D | XGBoost | 0.1465 | 0.8377 |
+
+<table>
+  <tr>
+    <th>Features</th>
+    <th>Model</th>
+    <th>R²</th>
+    <th>RMSE (eV)</th>
+  </tr>
+  <tr>
+    <td>5 Scalars</td>
+    <td>Random Forest</td>
+    <td><b>0.0946</b></td>
+    <td>0.8627</td>
+  </tr>
+  <tr>
+    <td>5 Scalars</td>
+    <td>XGBoost</td>
+    <td>0.1183</td>
+    <td>0.8514</td>
+  </tr>
+  <tr>
+    <td>RDKit 2D</td>
+    <td>Random Forest</td>
+    <td><b>0.1425</b></td>
+    <td>0.8396</td>
+  </tr>
+  <tr>
+    <td>RDKit 2D</td>
+    <td>XGBoost</td>
+    <td>0.1465</td>
+    <td>0.8377</td>
+  </tr>
+</table>
 
 ## 📂 Repository Structure
 ```text
