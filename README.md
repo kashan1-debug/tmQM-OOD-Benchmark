@@ -1,123 +1,73 @@
-\# Quantifying the Applicability Domain of Non-Spatial ML Models on tmQM
+<h1>Quantifying the Applicability Domain of Non-Spatial ML Models on tmQM</h1>
 
-[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+<p>
+  <img src="https://img.shields.io/badge/python-3.9+-blue.svg" alt="Python">
+  <img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License">
+</p>
 
-## 📖 Citation
-If you use this code or the corrected data alignment in your research, please cite our paper:
+<h2>📖 Citation</h2>
+<p>If you use this code or the corrected data alignment in your research, please cite our paper:</p>
+<blockquote>
+  <p><strong>Muhammad Kashan Ali.</strong> <em>Benchmarking the Out-of-Distribution Extrapolation Limits of Non-Spatial Machine Learning Models on the tmQM Dataset.</em> (in preparation, 2026).</p>
+</blockquote>
 
-> **Muhammad Kashan Ali.** *Quantifying the Applicability Domain of Non-Spatial Machine Learning Models for HOMO–LUMO Gap Prediction on the tmQM Dataset.* (in preparation, 2024).
+<hr>
 
----
+<h2>🖼️ Publication Figures</h2>
 
-## 📌 Overview
-This repository contains the data preprocessing, model training, and evaluation pipeline for our study on the 2024 release of the tmQM dataset. 
+<h3>1. Corrected Gap Distribution</h3>
+<p><em>The physically realistic distribution of gaps (1-8 eV) confirms the unit conversion.</em></p>
+<img src="https://raw.githubusercontent.com/kashan1-debug/tmQM-OOD-Benchmark/main/gap_distribution.png" width="700">
 
-While recent literature has demonstrated that 3D Graph Neural Networks (GNNs) can achieve high accuracy (\(R^2 \approx 0.77\)) by learning spatial ligand-field geometries, the extrapolative limits of standard non-spatial models remain undefined. 
+<h3>2. Random Forest Parity Plot</h3>
+<p><em>The model fails to predict extreme gaps (> 5 eV) and collapses to the mean.</em></p>
+<img src="https://raw.githubusercontent.com/kashan1-debug/tmQM-OOD-Benchmark/main/parity_plot_final.png" width="600">
 
-**Core Finding:** We demonstrate that non-spatial machine learning models (global scalars and 2D descriptors) reach an empirical ceiling of \(R^2 \approx 0.31\) under random cross-validation. Crucially, when evaluated on unseen transition metals via GroupKFold validation, performance catastrophically collapses, proving these models have near-zero extrapolative power and justifying the computational cost of 3D GNN architectures.
+<h3>3. SHAP Feature Importance</h3>
+<p><em>SHAP confirms the model relies on global atomic properties rather than local geometry.</em></p>
+<img src="https://raw.githubusercontent.com/kashan1-debug/tmQM-OOD-Benchmark/main/shap_summary_final.png" width="900">
 
-## 📊 Dataset & Features
-- **Source:** [tmQM 2024 release](https://github.com/uiocompcat/tmqm) — `tmQM/tmQM_y.csv`
-- **Complexes:** 108,541
-- **Unit Conversion:** The target `HL_Gap` is stored in Hartree. To ensure physical interpretability, we apply the standard **27.2114** conversion factor to eV (yielding a median gap of 2.97 eV).
-- **Aligned Dataset:** To ensure a fair comparison, all models were evaluated on exactly 100,831 complexes (removing those without valid SMILES).
+<h3>4. Applicability Domain Analysis</h3>
+<p><em>Error increases significantly as test molecules move further from the training manifold (kNN distance).</em></p>
+<img src="https://raw.githubusercontent.com/kashan1-debug/tmQM-OOD-Benchmark/main/applicability_domain.png" width="700">
 
-**Feature Sets Benchmarked:**
-1. **5 Scalars:** `Electronic_E`, `Dispersion_E`, `Dipole_M`, `Metal_q`, `Polarizability`.
-2. **RDKit 2D:** 14 topological descriptors (e.g., MolWt, LogP, TPSA).
+<h3>5. Leave-One-Metal-Out Analysis</h3>
+<p><em>The model catastrophically fails on unseen metals like Hg (R² = -0.77) and Ag (R² = -0.70), while maintaining some accuracy on Mn (R² = 0.35).</em></p>
+<img src="https://raw.githubusercontent.com/kashan1-debug/tmQM-OOD-Benchmark/main/per_metal_r2.png" width="900">
 
-## 🏆 Benchmark Results
+<hr>
 
-**Random 5-Fold Cross-Validation (In-Distribution)**
+<h2>📌 Overview</h2>
+<p>This repository contains the data preprocessing, model training, and evaluation pipeline for our study on the 2024 release of the tmQM dataset.</p>
+<p><strong>Core Finding:</strong> We demonstrate that non-spatial machine learning models (global scalars and 2D descriptors) reach an empirical ceiling of \(R^2 \approx 0.37\) under random cross-validation. Crucially, when evaluated on unseen transition metals via GroupKFold validation, performance catastrophically collapses, proving these models have near-zero extrapolative power and justifying the computational cost of 3D GNN architectures.</p>
+
+<h2>📊 Dataset & Features</h2>
+<ul>
+  <li><strong>Source:</strong> tmQM 2024 release — <code>tmQM/tmQM_y.csv</code></li>
+  <li><strong>Complexes:</strong> 108,541</li>
+  <li><strong>Unit Conversion:</strong> The target <code>HL_Gap</code> is stored in Hartree. To ensure physical interpretability, we apply the standard <strong>27.2114</strong> conversion factor to eV.</li>
+  <li><strong>Aligned Dataset:</strong> To ensure a fair comparison, all models were evaluated on exactly 100,831 complexes (removing those without valid SMILES).</li>
+</ul>
+
+<h2>🏆 Benchmark Results</h2>
+
+<h3>Random 5-Fold Cross-Validation (In-Distribution)</h3>
 <table>
-  <tr>
-    <th>Features</th>
-    <th>Model</th>
-    <th>R²</th>
-    <th>RMSE (eV)</th>
-  </tr>
-  <tr>
-    <td>5 Scalars</td>
-    <td>Random Forest</td>
-    <td><b>0.2983</b></td>
-    <td>0.7595</td>
-  </tr>
-  <tr>
-    <td>5 Scalars</td>
-    <td>XGBoost</td>
-    <td>0.2712</td>
-    <td>0.7740</td>
-  </tr>
-  <tr>
-    <td>RDKit 2D</td>
-    <td>Random Forest</td>
-    <td><b>0.3074</b></td>
-    <td>0.7545</td>
-  </tr>
-  <tr>
-    <td>RDKit 2D</td>
-    <td>XGBoost</td>
-    <td>0.2702</td>
-    <td>0.7746</td>
-  </tr>
+  <tr><th>Features</th><th>Model</th><th>R²</th><th>RMSE (eV)</th></tr>
+  <tr><td>5 Scalars</td><td>Random Forest</td><td><b>0.2983</b></td><td>0.7595</td></tr>
+  <tr><td>RDKit 2D</td><td>Random Forest</td><td><b>0.3074</b></td><td>0.7545</td></tr>
+  <tr><td>Morgan FP</td><td>XGBoost</td><td><b>0.3732</b></td><td>0.7178</td></tr>
 </table>
 
-**GroupKFold Validation (Out-of-Distribution by Metal)**
+<h3>GroupKFold Validation (Out-of-Distribution by Metal)</h3>
 <table>
-  <tr>
-    <th>Features</th>
-    <th>Model</th>
-    <th>R²</th>
-    <th>RMSE (eV)</th>
-  </tr>
-  <tr>
-    <td>5 Scalars</td>
-    <td>Random Forest</td>
-    <td><b>0.0946</b></td>
-    <td>0.8627</td>
-  </tr>
-  <tr>
-    <td>5 Scalars</td>
-    <td>XGBoost</td>
-    <td>0.1183</td>
-    <td>0.8514</td>
-  </tr>
-  <tr>
-    <td>RDKit 2D</td>
-    <td>Random Forest</td>
-    <td><b>0.1425</b></td>
-    <td>0.8396</td>
-  </tr>
-  <tr>
-    <td>RDKit 2D</td>
-    <td>XGBoost</td>
-    <td>0.1465</td>
-    <td>0.8377</td>
-  </tr>
+  <tr><th>Features</th><th>Model</th><th>R²</th><th>RMSE (eV)</th></tr>
+  <tr><td>5 Scalars</td><td>Random Forest</td><td><b>0.0946</b></td><td>0.8627</td></tr>
+  <tr><td>RDKit 2D</td><td>Random Forest</td><td><b>0.1425</b></td><td>0.8396</td></tr>
+  <tr><td>Morgan FP</td><td>XGBoost</td><td><b>0.2009</b></td><td>0.8105</td></tr>
 </table>
 
-## 🖼️ Publication Figures
-
-### Corrected Gap Distribution
-*The physically realistic distribution of gaps (1-8 eV) confirms the unit conversion.*
-![Gap Distribution](gap_distribution.png)
-
-### Random Forest Parity Plot
-*The model fails to predict extreme gaps (> 5 eV) and collapses to the mean (R² = 0.305).*
-![Parity Plot](parity_plot_final.png)
-
-### SHAP Feature Importance
-*SHAP confirms the model relies on global atomic properties (`Polarizability`, `Electronic_E`) rather than local geometry.*
-![SHAP Summary](shap_summary_final.png)
-
-
-## 📂 Repository Structure
-```text
-├── gap_distribution.png          # Corrected HOMO-LUMO gap distribution (eV)
-├── parity_plot_final.png         # Random Forest parity plot (R² = 0.305)
-├── shap_summary_final.png        # SHAP summary plot for 5-scalar model
-├── run_pipeline.py               # Main execution pipeline
-├── requirements.txt              # Python dependencies
-├── LICENSE
-└── README.md
+<h2>🚀 Reproducing the Results</h2>
+<pre><code>pip install -r requirements.txt
+python run_pipeline.py
+</code></pre>
