@@ -1,4 +1,4 @@
-<h1>Quantifying the Applicability Domain of Non-Spatial ML Models on tmQM</h1>
+<h1>Benchmarking the Out-of-Distribution Extrapolation Limits of Non-Spatial ML Models on tmQM</h1>
 
 <p>
   <img src="https://img.shields.io/badge/python-3.9+-blue.svg" alt="Python">
@@ -28,7 +28,7 @@
 <img src="https://raw.githubusercontent.com/kashan1-debug/tmQM-OOD-Benchmark/main/shap_summary_final.png" width="900">
 
 <h3>4. Applicability Domain Analysis</h3>
-<p><em>Error increases significantly as test molecules move further from the training manifold (kNN distance).</em></p>
+<p><em>Error increases significantly as test molecules move further from the training manifold (scaled kNN distance).</em></p>
 <img src="https://raw.githubusercontent.com/kashan1-debug/tmQM-OOD-Benchmark/main/applicability_domain.png" width="700">
 
 <h3>5. Leave-One-Metal-Out Analysis</h3>
@@ -39,7 +39,7 @@
 
 <h2>📌 Overview</h2>
 <p>This repository contains the data preprocessing, model training, and evaluation pipeline for our study on the 2024 release of the tmQM dataset.</p>
-<p><strong>Core Finding:</strong> We demonstrate that non-spatial machine learning models (global scalars and 2D descriptors) reach an empirical ceiling of \(R^2 \approx 0.37\) under random cross-validation. Crucially, when evaluated on unseen transition metals via GroupKFold validation, performance catastrophically collapses, proving these models have near-zero extrapolative power and justifying the computational cost of 3D GNN architectures.</p>
+<p><strong>Core Finding:</strong> We demonstrate that non-spatial machine learning models (global scalars, 2D descriptors, and Morgan fingerprints) reach an empirical ceiling of <b>R² ≈ 0.39</b> under random cross-validation. Crucially, when evaluated on unseen transition metals via GroupKFold validation, performance catastrophically collapses (e.g., Morgan fingerprints drop from 0.3732 to 0.2009), proving these models have near-zero extrapolative power and justifying the computational cost of 3D GNN architectures.</p>
 
 <h2>📊 Dataset & Features</h2>
 <ul>
@@ -53,18 +53,28 @@
 
 <h3>Random 5-Fold Cross-Validation (In-Distribution)</h3>
 <table>
-  <tr><th>Features</th><th>Model</th><th>R²</th><th>RMSE (eV)</th></tr>
-  <tr><td>5 Scalars</td><td>Random Forest</td><td><b>0.2983</b></td><td>0.7595</td></tr>
-  <tr><td>RDKit 2D</td><td>Random Forest</td><td><b>0.3074</b></td><td>0.7545</td></tr>
-  <tr><td>Morgan FP</td><td>XGBoost</td><td><b>0.3732</b></td><td>0.7178</td></tr>
+  <tr>
+    <th>Features</th><th>Model</th><th>R²</th><th>RMSE (eV)</th><th>MAE (eV)</th>
+  </tr>
+  <tr><td>5 Scalars</td><td>Random Forest</td><td>0.2983</td><td>0.7595</td><td>0.5784</td></tr>
+  <tr><td>5 Scalars</td><td>XGBoost</td><td>0.2712</td><td>0.7740</td><td>0.5949</td></tr>
+  <tr><td>RDKit 2D</td><td>Random Forest</td><td>0.3074</td><td>0.7545</td><td>0.5717</td></tr>
+  <tr><td>RDKit 2D</td><td>XGBoost</td><td>0.2702</td><td>0.7746</td><td>0.5919</td></tr>
+  <tr><td>Morgan FP</td><td>Random Forest</td><td><b>0.3860</b></td><td><b>0.7105</b></td><td><b>0.5261</b></td></tr>
+  <tr><td>Morgan FP</td><td>XGBoost</td><td><b>0.3732</b></td><td><b>0.7178</b></td><td><b>0.5372</b></td></tr>
 </table>
 
 <h3>GroupKFold Validation (Out-of-Distribution by Metal)</h3>
 <table>
-  <tr><th>Features</th><th>Model</th><th>R²</th><th>RMSE (eV)</th></tr>
-  <tr><td>5 Scalars</td><td>Random Forest</td><td><b>0.0946</b></td><td>0.8627</td></tr>
-  <tr><td>RDKit 2D</td><td>Random Forest</td><td><b>0.1425</b></td><td>0.8396</td></tr>
-  <tr><td>Morgan FP</td><td>XGBoost</td><td><b>0.2009</b></td><td>0.8105</td></tr>
+  <tr>
+    <th>Features</th><th>Model</th><th>R²</th><th>RMSE (eV)</th><th>MAE (eV)</th>
+  </tr>
+  <tr><td>5 Scalars</td><td>Random Forest</td><td>0.0946</td><td>0.8627</td><td>0.6636</td></tr>
+  <tr><td>5 Scalars</td><td>XGBoost</td><td>0.1183</td><td>0.8514</td><td>0.6550</td></tr>
+  <tr><td>RDKit 2D</td><td>Random Forest</td><td>0.1425</td><td>0.8396</td><td>0.6414</td></tr>
+  <tr><td>RDKit 2D</td><td>XGBoost</td><td>0.1465</td><td>0.8377</td><td>0.6411</td></tr>
+  <tr><td>Morgan FP</td><td>Random Forest</td><td>0.1836</td><td>0.8192</td><td>0.6228</td></tr>
+  <tr><td>Morgan FP</td><td>XGBoost</td><td><b>0.2009</b></td><td><b>0.8105</b></td><td><b>0.6168</b></td></tr>
 </table>
 
 <h2>🚀 Reproducing the Results</h2>
