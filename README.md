@@ -13,30 +13,32 @@
 
 <hr>
 
-<h2>🖼️ Publication Figures</h2>
+## 🖼️ Publication Figures
 
-<h3>1. Corrected Gap Distribution</h3>
-<p><em>The physically realistic distribution of gaps (1-8 eV) confirms the unit conversion.</em></p>
-<img src="https://raw.githubusercontent.com/kashan1-debug/tmQM-OOD-Benchmark/main/gap_distribution.png" width="700">
+### 1. Corrected Gap Distribution
+*The physically realistic distribution of gaps (1-8 eV) confirms the unit conversion.*
 
-<h3>2. Random Forest Parity Plot</h3>
-<p><em>The model fails to predict extreme gaps (> 5 eV) and collapses to the mean.</em></p>
-<img src="https://raw.githubusercontent.com/kashan1-debug/tmQM-OOD-Benchmark/main/parity_plot_final.png" width="600">
+![Gap Distribution](gap_distribution.png)
 
-<h3>3. SHAP Feature Importance</h3>
-<p><em>SHAP confirms the model relies on global atomic properties rather than local geometry.</em></p>
-<img src="https://raw.githubusercontent.com/kashan1-debug/tmQM-OOD-Benchmark/main/shap_summary_final.png" width="900">
+### 2. Random Forest Parity Plot
+*The model fails to predict extreme gaps (> 5 eV) and collapses to the mean.*
 
-<h3>4. Applicability Domain Analysis</h3>
-<p><em>Error increases significantly as test molecules move further from the training manifold (scaled kNN distance).</em></p>
-<img src="https://raw.githubusercontent.com/kashan1-debug/tmQM-OOD-Benchmark/main/applicability_domain.png" width="700">
+![Parity Plot](parity_plot_final.png)
 
-<h3>5. Leave-One-Metal-Out Analysis</h3>
-<p><em>The model catastrophically fails on unseen metals like Hg (R² = -0.77) and Ag (R² = -0.70), while maintaining some accuracy on Mn (R² = 0.35).</em></p>
-<img src="https://raw.githubusercontent.com/kashan1-debug/tmQM-OOD-Benchmark/main/per_metal_r2.png" width="900">
+### 3. SHAP Feature Importance
+*SHAP confirms the model relies on global atomic properties rather than local geometry.*
 
-<hr>
+![SHAP Summary](shap_summary_final.png)
 
+### 4. Applicability Domain Analysis
+*Error increases significantly as test molecules move further from the training manifold (scaled kNN distance).*
+
+![Applicability Domain](applicability_domain.png)
+
+### 5. Leave-One-Metal-Out Analysis
+*The model catastrophically fails on unseen metals like Hg (R² = -0.77) and Ag (R² = -0.70), while maintaining some accuracy on Mn (R² = 0.35).*
+
+![Per-Metal Breakdown](per_metal_r2.png)
 <h2>📌 Overview</h2>
 <p>This repository contains the data preprocessing, model training, and evaluation pipeline for our study on the 2024 release of the tmQM dataset.</p>
 <p><strong>Core Finding:</strong> We demonstrate that non-spatial machine learning models (global scalars, 2D descriptors, and Morgan fingerprints) reach an empirical ceiling of <b>R² ≈ 0.39</b> under random cross-validation. Crucially, when evaluated on unseen transition metals via GroupKFold validation, performance catastrophically collapses (e.g., Morgan fingerprints drop from 0.3732 to 0.2009), proving these models have near-zero extrapolative power and justifying the computational cost of 3D GNN architectures.</p>
