@@ -158,9 +158,17 @@ pip install -r requirements.txt
 python run_pipeline.py
 ```
 
-The pipeline in `run_pipeline.py` is the code that produced these runs. The
-large feature files (parquet) are not in this repo — regenerate them with the
-pipeline.
+`run_pipeline.py` is the cleaned pipeline for the 5-fold CV part (random +
+grouped, 5 scalars / RDKit 2D / 256-bit Morgan FP, aligned on the common
+valid index). **It does not reproduce the tables in `results/` exactly:**
+the 80/20 benchmark tables (`benchmark_results.csv`, `model_results.csv`,
+`rf_predictions.csv`) and the `xTB_only` rows come from earlier Colab runs
+whose script is not in this repo, and `results_cv.csv` was run on the full
+108,541-row set while this pipeline aligns to the ~100,831-row common index.
+The pipeline also uses 256-bit Morgan fingerprints, while the surviving
+feature file is 1024-bit. See `docs/tmqm_benchmark_report.md` for the full
+code audit. The large feature files (parquet) are not in this repo —
+regenerate them with the pipeline.
 
 ## Files
 

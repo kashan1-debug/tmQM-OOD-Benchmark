@@ -68,6 +68,53 @@ only the numbers in `results/` and drops the Morgan table.
   (whether "random" is 5-fold CV or a single split is not recorded in the
   file).
 
+## Code audit — `run_pipeline.py` (287 lines, checked 2026-11-27)
+
+The code is clean and readable, it compiles, and the grouped-CV leakage
+assertion (`train`/`test` metal sets must be disjoint) is genuinely good.
+But **it does not reproduce the tables in `results/`**. Three concrete
+mismatches:
+
+1. **It writes a file that does not exist.** `main()` runs random + grouped
+   5-fold CV and saves `results_final.csv`. Neither the repo nor the uploaded
+   bundle contains `results_final.csv`. Its split labels would be
+   `random_known` / `grouped`, while `results_cv.csv` says `random` /
+   `grouped` and reports N = 108,541 for the 5 scalars — this pipeline aligns
+   all three feature sets on the common valid index first (≈ 100,831 rows),
+   so it can never report N = 108,541.
+2. **There is no xTB in the code.** Nothing computes or loads xTB features,
+   so the `xTB_only` rows in `benchmark_results.csv` (RF −0.20) come from a
+   different script that is not in this repo. Same for the 80/20 splits with
+   seeds 42 / 123 / 2024: the only 80/20 split in this code is inside
+   `generate_figures()` for the parity plot, on the aligned set — which would
+   give a 20,167-row test set, not the 21,709 rows in `rf_predictions.csv`.
+3. **Morgan fingerprints are 256-bit here, 1024-bit in the bundle.**
+   `compute_fingerprints()` uses `nBits=256`; the surviving
+   `X_morgan.parquet` has 1024 columns. Different features, different
+   numbers — another reason the old README's Morgan table cannot be traced to
+   this code.
+
+Smaller findings:
+
+- `requirements.txt` said `scikit-learn>=1.3.0`, but the code imports
+  `root_mean_squared_error`, which only exists from scikit-learn 1.4. Fixed
+  to `>=1.4.0`.
+- `seaborn` is listed in `requirements.txt` but imported nowhere in the
+  pipeline. Harmless; left as is.
+- `generate_figures()` trains the per-metal LOMO models with 100 XGBoost
+  trees while `get_models()` uses 200 — the figure and the CV table use
+  different model settings. The figure's values still match the bundle.
+- `extract_metal()` (regex over SMILES) is fragile — it returns the first
+  metal-like token anywhere in the string — but no wrong-metal case was found
+  in the verified files. Rows it cannot parse become `UNKNOWN` and are
+  dropped from the grouped runs, which is the honest handling.
+- The `tmqm/tmQM/tmQM_y.csv` input path (after cloning
+  `github.com/uiocompcat/tmqm`) was not re-verified by cloning here; it
+  matches the path used in the original runs.
+
+The README's "Reproducing the results" section now says this plainly instead
+of claiming the pipeline produced the tables.
+
 ## Scientific reading (unchanged)
 
 - The 5 DFT scalars come from the same TPSSh calculation as the gap. Using
