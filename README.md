@@ -5,9 +5,10 @@
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**Status:** benchmark archive. The results below are the verified numbers from the
-runs in `results/`. There is no paper in preparation from this project — the work
-is kept here as a complete, honest benchmark, including its negative result.
+**Status:** limits paper in preparation. This repo is the benchmark behind
+that paper: every route tried so far fails to transfer to unseen metals, and
+the numbers below are the verified evidence. The full 3-seed rerun of the
+main pipeline is in progress (see "Reproducing the results").
 
 ## Core finding
 
@@ -16,8 +17,10 @@ given help. The best model (Random Forest) reaches **R² ≈ 0.33–0.38 on a ra
 split** and collapses to **R² ≈ 0.07–0.15 on grouped (by-metal) splits**. Under
 leave-one-metal-out, the median metal scores **R² = −0.048** — worse than
 predicting the mean. Cheap xTB-only features fail outright (R² ≈ 0.03, Random
-Forest −0.20). The gap is not predictable from these inputs, and it does not
-transfer to unseen metals.
+Forest −0.20). Adding simple 3D geometry helps on random splits (R² 0.44) but
+does **not** fix transfer to new metals (grouped R² 0.03–0.16 across two
+independent samples). The gap is not predictable from these inputs, and it
+does not transfer to unseen metals.
 
 ## Read this first — what the numbers do and do not mean
 
@@ -145,6 +148,42 @@ Median R² over held-out metals: **−0.048**. Worst: Hg ≈ −0.77, Ag ≈ −
 Au ≈ −0.56. Best: Mn ≈ 0.35. These values are read from the figure — no
 per-metal results table survives in this bundle.
 
+### 3D geometry test (2026-11-27, from `results/results_3d_test.csv`)
+
+The one route that could have rescued the project was 3D structure: a flat
+SMILES string cannot see a metal complex's shape, so simple 3D features were
+built from the xyz coordinates (coordination number, metal–ligand bond-length
+statistics, donor composition, ligand–metal–ligand angles, metal properties —
+~30 features) and tested against the 256-bit Morgan baseline on the same
+5,000-complex samples and the same splits. Two independent samples were run
+(seed 0 in Colab, seed 1 reproduced on a second machine); the cell is
+`colab_3d_test_paste.txt`.
+
+On random splits 3D clearly helps (XGBoost R² 0.44 vs Morgan 0.25, and 0.50
+combined). On grouped splits — new metals, the test that matters — it does
+not:
+
+| Split | Features | Model | R² (seed 0) | R² (seed 1) |
+|---|---|---|---|---|
+| grouped | 3D only | Random Forest | 0.038 | 0.124 |
+| grouped | 3D only | XGBoost | 0.033 | 0.161 |
+| grouped | Morgan FP (256) | Random Forest | 0.107 | 0.139 |
+| grouped | Morgan FP (256) | XGBoost | 0.109 | 0.126 |
+| grouped | Morgan + 3D | Random Forest | 0.042 | 0.166 |
+| grouped | Morgan + 3D | XGBoost | 0.126 | 0.258 |
+
+The decision rule, set before the runs, was: grouped 3D R² ≥ 0.35 means the
+revival is real, 0.25–0.35 means promising, below 0.25 means stop. Both seeds
+give 3D-only grouped R² of 0.03–0.16 — far below the bar, and 3D alone is
+worse than Morgan on new metals in both runs. **Verdict: simple 3D
+descriptors do not fix transfer. Do not scale this test up.**
+
+Two honest caveats. First, the grouped score is noisy at n ≈ 5,000 (±0.1
+between seeds, depending on which metals are held out) — the exact value
+moves, but the conclusion does not: nothing approaches 0.35. Second, this
+tests *hand-made* 3D descriptors, not a 3D graph neural network, which
+remains untested, expensive and uncertain.
+
 ### Feature importance (Random Forest, DFT-assisted)
 
 From `results/feature_importance.csv` — the five scalars take all of the
@@ -204,7 +243,16 @@ python tmqm_metal_ood_benchmark.py --seeds 1 --out-dir results_v2_run
 
 The rerun of 2026-11-27 used a single seed (`--seeds 1`) — that is why the
 summary table's std columns are all 0.0. For a real spread, rerun with
-`--seeds 3` (the default).
+`--seeds 3` (the default). **A full `--seeds 3` rerun is in progress
+(2026-11-27, run on a local machine so the outputs survive); its tables,
+LOMO file and figures will replace the lost 2026-11-27 run's outputs when it
+finishes.**
+
+The 3D test is a separate single cell, `colab_3d_test_paste.txt` — paste it
+into one Colab cell and run it. It needs no Drive mount: it clones the tmQM
+repo itself, samples 5,000 complexes, builds the 3D features and the Morgan
+baseline, and prints the comparison plus the decision. Its two runs are in
+`results/results_3d_test.csv`.
 
 > **Do not lose the next run.** The 2026-11-27 run's files died with the
 > Colab runtime: the script writes its outputs only to `--out-dir`, and the
@@ -227,11 +275,13 @@ runs whose script is not in this repo.
 ```
 ├── tmqm_metal_ood_benchmark.py  # v2 pipeline — produced results_cv_reproduced.csv
 ├── run_pipeline.py              # Earlier pipeline (CV only; does not reproduce the tables)
+├── colab_3d_test_paste.txt      # 3D geometry test — one pasteable Colab cell
 ├── requirements.txt
 ├── results/
 │   ├── benchmark_results.csv       # 80/20 splits, seeds 42/123/2024, eV
 │   ├── results_cv.csv              # Older CV summary, eV (different run)
 │   ├── results_cv_reproduced.csv   # 5-fold CV rerun 2026-11-27, eV (Morgan 256-bit)
+│   ├── results_3d_test.csv         # 3D test, 2 seeds × 12 rows, eV
 │   ├── model_results.csv           # Same runs as benchmark_results, in Hartree
 │   ├── model_summary.csv           # Mean ± std over seeds
 │   ├── feature_importance.csv      # RF importances (5 DFT scalars)

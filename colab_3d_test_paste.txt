@@ -1,0 +1,329 @@
+# tmQM 3D revival test — ONE pasteable Colab cell
+# Question: does adding simple 3D geometry (from the xyz files) lift the
+# grouped (new-metal) score above the 2D Morgan baseline?
+# Decision rule is printed at the end. Run it, paste the output back.
+# Needs: the tmqm repo (cloned below if missing), ~5-10 min.
+
+!pip install -q rdkit xgboost scikit-learn pandas numpy scipy
+
+import os, re, glob, gzip, subprocess, time
+import numpy as np
+import pandas as pd
+from rdkit import Chem, RDLogger
+from rdkit.DataStructs import cDataStructs
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
+from sklearn.model_selection import KFold
+from xgboost import XGBRegressor
+
+RDLogger.DisableLog("rdApp.*")
+UNIT_FACTOR = 27.2114  # Hartree -> eV
+N_SAMPLE = 5000        # complexes in the test (random sample, seed 0)
+SEED = 0
+
+METALS = {
+    "Sc", "Ti", "V", "Cr", "Mn", "Fe", "Co", "Ni", "Cu", "Zn",
+    "Y", "Zr", "Nb", "Mo", "Tc", "Ru", "Rh", "Pd", "Ag", "Cd",
+    "Hf", "Ta", "W", "Re", "Os", "Ir", "Pt", "Au", "Hg",
+    "La", "Ce", "Pr", "Nd", "Sm", "Eu", "Gd", "Tb", "Dy", "Ho", "Er", "Tm", "Yb", "Lu",
+}
+# metal: (Z, group, period, covalent radius A, Pauling EN)
+METAL_PROPS = {
+    "Sc": (21, 3, 4, 1.70, 1.36), "Ti": (22, 4, 4, 1.60, 1.54), "V": (23, 5, 4, 1.53, 1.63),
+    "Cr": (24, 6, 4, 1.39, 1.66), "Mn": (25, 7, 4, 1.39, 1.55), "Fe": (26, 8, 4, 1.32, 1.83),
+    "Co": (27, 9, 4, 1.26, 1.88), "Ni": (28, 10, 4, 1.24, 1.91), "Cu": (29, 11, 4, 1.32, 1.90),
+    "Zn": (30, 12, 4, 1.22, 1.65), "Y": (39, 3, 5, 1.90, 1.22), "Zr": (40, 4, 5, 1.75, 1.33),
+    "Nb": (41, 5, 5, 1.64, 1.60), "Mo": (42, 6, 5, 1.54, 2.16), "Tc": (43, 7, 5, 1.47, 1.90),
+    "Ru": (44, 8, 5, 1.46, 2.20), "Rh": (45, 9, 5, 1.42, 2.28), "Pd": (46, 10, 5, 1.39, 2.20),
+    "Ag": (47, 11, 5, 1.45, 1.93), "Cd": (48, 12, 5, 1.44, 1.69), "Hf": (72, 4, 6, 1.75, 1.30),
+    "Ta": (73, 5, 6, 1.70, 1.50), "W": (74, 6, 6, 1.62, 2.36), "Re": (75, 7, 6, 1.51, 1.90),
+    "Os": (76, 8, 6, 1.44, 2.20), "Ir": (77, 9, 6, 1.41, 2.20), "Pt": (78, 10, 6, 1.36, 2.28),
+    "Au": (79, 11, 6, 1.36, 2.54), "Hg": (80, 12, 6, 1.32, 2.00),
+    "La": (57, 3, 6, 2.07, 1.10), "Ce": (58, 3, 6, 2.04, 1.12), "Pr": (59, 3, 6, 2.03, 1.13),
+    "Nd": (60, 3, 6, 2.01, 1.14), "Sm": (62, 3, 6, 1.98, 1.17), "Eu": (63, 3, 6, 1.98, 1.20),
+    "Gd": (64, 3, 6, 1.96, 1.20), "Tb": (65, 3, 6, 1.94, 1.20), "Dy": (66, 3, 6, 1.92, 1.22),
+    "Ho": (67, 3, 6, 1.92, 1.23), "Er": (68, 3, 6, 1.89, 1.24), "Tm": (69, 3, 6, 1.90, 1.25),
+    "Yb": (70, 3, 6, 1.87, 1.10), "Lu": (71, 3, 6, 1.87, 1.27),
+}
+EN = {"H": 2.20, "B": 2.04, "C": 2.55, "N": 3.04, "O": 3.44, "F": 3.98,
+      "Si": 1.90, "P": 2.19, "S": 2.58, "Cl": 3.16, "Br": 2.96, "I": 2.66}
+RAD = {"H": 0.31, "B": 0.84, "C": 0.76, "N": 0.71, "O": 0.66, "F": 0.57,
+       "Si": 1.11, "P": 1.07, "S": 1.05, "Cl": 1.02, "Br": 1.20, "I": 1.39}
+HEADER_RE = re.compile(r"CSD_code\s*=\s*(\S+)")
+
+def rmse(y, p):
+    return float(np.sqrt(mean_squared_error(y, p)))
+
+def metrics(y, p):
+    return {"R2": float(r2_score(y, p)), "RMSE": rmse(y, p), "MAE": float(mean_absolute_error(y, p))}
+
+# --------------------------------------------------------------------------- #
+# 1. Data: clone if needed, load table, sample N complexes
+# --------------------------------------------------------------------------- #
+if not os.path.exists("tmqm/tmQM/tmQM_y.csv"):
+    print("Cloning tmQM repository (one time, a few minutes)...")
+    subprocess.run(["git", "clone", "--depth", "1",
+                    "https://github.com/uiocompcat/tmqm.git", "tmqm"], check=True)
+else:
+    print("tmQM data found.")
+
+df = pd.read_csv("tmqm/tmQM/tmQM_y.csv", sep=";")
+print(f"Loaded {len(df):,} rows.")
+df = df.dropna(subset=["HL_Gap"]).reset_index(drop=True)
+sample = df.sample(n=min(N_SAMPLE, len(df)), random_state=SEED).reset_index(drop=True)
+sample["y"] = sample["HL_Gap"].astype(float) * UNIT_FACTOR
+wanted = set(sample["CSD_code"].astype(str))
+print(f"Sample: {len(sample):,} complexes, median gap {sample['y'].median():.2f} eV.")
+
+# --------------------------------------------------------------------------- #
+# 2. Parse xyz frames for the sampled codes only (one streaming pass)
+# --------------------------------------------------------------------------- #
+def parse_xyz_for_codes(data_dir, wanted):
+    """Return {CSD_code: (elements, coords)} for wanted codes only."""
+    files = sorted(glob.glob(os.path.join(data_dir, "tmQM_X*.xyz*")))
+    print(f"Reading xyz from {len(files)} file(s)...")
+    out = {}
+    for f in files:
+        opener = gzip.open if f.endswith(".gz") else open
+        with opener(f, "rt") as fh:
+            lines = fh
+            while True:
+                try:
+                    first = next(lines)
+                except StopIteration:
+                    break
+                first = first.strip()
+                if not first.isdigit():
+                    continue
+                n = int(first)
+                try:
+                    comment = next(lines)
+                except StopIteration:
+                    break
+                m = HEADER_RE.search(comment)
+                code = m.group(1) if m else None
+                atoms = []
+                ok_frame = True
+                for _ in range(n):
+                    try:
+                        parts = next(lines).split()
+                    except StopIteration:
+                        ok_frame = False
+                        break
+                    if len(parts) < 4:
+                        ok_frame = False
+                        break
+                    atoms.append((parts[0], float(parts[1]), float(parts[2]), float(parts[3])))
+                if ok_frame and code in wanted:
+                    els = [a[0] for a in atoms]
+                    xyz = np.array([[a[1], a[2], a[3]] for a in atoms], dtype=float)
+                    out[code] = (els, xyz)
+                    if len(out) % 1000 == 0:
+                        print(f"  found {len(out):,}/{len(wanted):,} frames...")
+                    if len(out) == len(wanted):
+                        print(f"  all {len(wanted):,} frames found, stopping early.")
+                        return out
+    return out
+
+frames = parse_xyz_for_codes("tmqm/tmQM", wanted)
+print(f"Frames found: {len(frames):,} / {len(wanted):,}")
+assert len(frames) > 1000, "Too few xyz frames found — check the tmQM download."
+sample = sample[sample["CSD_code"].astype(str).isin(frames)].reset_index(drop=True)
+print(f"Complexes with xyz: {len(sample):,}")
+
+# --------------------------------------------------------------------------- #
+# 3. 3D features from coordinates (metal = the one transition-metal atom)
+# --------------------------------------------------------------------------- #
+def d_electrons(symbol):
+    z, g, p, r, en = METAL_PROPS[symbol]
+    if symbol in ("La", "Ce", "Pr", "Nd", "Sm", "Eu", "Gd", "Tb", "Dy", "Ho", "Er", "Tm", "Yb", "Lu"):
+        return 1
+    return g - 2  # groups 3-12 -> d1-d10
+
+def featurise_3d(els, xyz):
+    """~30 interpretable 3D features. Never returns NaN (0.0 defaults)."""
+    tm_idx = [i for i, e in enumerate(els) if e in METALS]
+    if len(tm_idx) != 1:
+        return None
+    mi = tm_idx[0]
+    metal = els[mi]
+    z, g, p, r_cov, en_m = METAL_PROPS[metal]
+    vec = xyz - xyz[mi]
+    dist = np.sqrt((vec ** 2).sum(axis=1))
+    dist[mi] = np.inf
+    order = np.argsort(dist)
+    d6 = dist[order[:6]]
+    d6 = d6[np.isfinite(d6)]
+    coord = [i for i in range(len(els)) if i != mi and dist[i] < 2.8]
+    # --- bond lengths among coordinating atoms ---
+    bd = dist[coord] if coord else np.array([0.0])
+    # --- donor composition ---
+    donors = [els[i] for i in coord]
+    nN = donors.count("N"); nO = donors.count("O"); nC = donors.count("C")
+    nS = donors.count("S"); nP = donors.count("P")
+    nHal = sum(donors.count(h) for h in ("F", "Cl", "Br", "I"))
+    nOther = len(donors) - (nN + nO + nC + nS + nP + nHal)
+    en_d = float(np.mean([EN.get(e, 2.0) for e in donors])) if donors else 0.0
+    rad_d = float(np.mean([RAD.get(e, 1.0) for e in donors])) if donors else 0.0
+    # --- angles at the metal between coordinating atoms ---
+    if len(coord) >= 2:
+        v = vec[coord]
+        v = v / np.sqrt((v ** 2).sum(axis=1, keepdims=True))
+        angs = []
+        for a in range(len(v)):
+            for b in range(a + 1, len(v)):
+                c = float(np.clip(np.dot(v[a], v[b]), -1.0, 1.0))
+                angs.append(np.degrees(np.arccos(c)))
+        angs = np.array(angs)
+        mean_ang, std_ang = float(angs.mean()), float(angs.std())
+        min_ang, max_ang = float(angs.min()), float(angs.max())
+        frac90 = float(((angs >= 80) & (angs <= 100)).mean())
+        frac180 = float(((angs >= 170) & (angs <= 180)).mean())
+    else:
+        mean_ang = std_ang = min_ang = max_ang = frac90 = frac180 = 0.0
+    # --- size ---
+    centroid = xyz.mean(axis=0)
+    rg = float(np.sqrt(((xyz - centroid) ** 2).sum(axis=1).mean()))
+    extent = float(np.sqrt((vec ** 2).sum(axis=1).max()))
+    mean_bond = float(bd.mean()); std_bond = float(bd.std())
+    feats = {
+        "natoms": len(els), "cn_2.8": len(coord),
+        "mean_d6": float(d6.mean()) if len(d6) else 0.0,
+        "min_d6": float(d6.min()) if len(d6) else 0.0,
+        "max_d6": float(d6.max()) if len(d6) else 0.0,
+        "std_d6": float(d6.std()) if len(d6) else 0.0,
+        "mean_bond": mean_bond, "std_bond": std_bond,
+        "min_bond": float(bd.min()), "max_bond": float(bd.max()),
+        "rel_spread": std_bond / mean_bond if mean_bond > 0 else 0.0,
+        "n_N": nN, "n_O": nO, "n_C": nC, "n_S": nS, "n_P": nP, "n_hal": nHal, "n_other": nOther,
+        "mean_donor_EN": en_d, "mean_donor_rad": rad_d,
+        "mean_angle": mean_ang, "std_angle": std_ang, "min_angle": min_ang, "max_angle": max_ang,
+        "frac_90": frac90, "frac_180": frac180,
+        "Z_metal": z, "group_metal": g, "period_metal": p,
+        "r_cov_metal": r_cov, "EN_metal": en_m, "d_electrons": d_electrons(metal),
+        "rg": rg, "extent": extent,
+    }
+    return metal, feats
+
+rows_3d, metals, keep_idx = [], [], []
+n_bad_metal = 0
+t0 = time.time()
+for i, code in enumerate(sample["CSD_code"].astype(str)):
+    els, xyz = frames[code]
+    out = featurise_3d(els, xyz)
+    if out is None:
+        n_bad_metal += 1
+        continue
+    m, f = out
+    rows_3d.append(f); metals.append(m); keep_idx.append(i)
+print(f"3D features: {len(rows_3d):,} ok, {n_bad_metal} skipped (metal not unique), {time.time()-t0:.0f}s")
+X3 = pd.DataFrame(rows_3d)
+metals = np.array(metals)
+sub = sample.iloc[keep_idx].reset_index(drop=True)
+y = sub["y"].values
+print(f"Test set: {len(y):,} complexes, {len(set(metals))} metals, median gap {np.median(y):.2f} eV")
+assert np.isfinite(X3.values).all(), "NaN in 3D features!"
+
+# --------------------------------------------------------------------------- #
+# 4. 2D baseline on the SAME rows: 256-bit Morgan FP (RDKit)
+# --------------------------------------------------------------------------- #
+def make_morgan(n_bits=256, radius=2):
+    try:
+        from rdkit.Chem import rdFingerprintGenerator
+        gen = rdFingerprintGenerator.GetMorganGenerator(radius=radius, fpSize=n_bits)
+        def _fp(mol):
+            arr = np.zeros((n_bits,), dtype=np.uint8)
+            cDataStructs.ConvertToNumpyArray(gen.GetFingerprint(mol), arr)
+            return arr
+        return _fp
+    except Exception:
+        from rdkit.Chem import AllChem
+        def _fp(mol):
+            arr = np.zeros((n_bits,), dtype=np.uint8)
+            cDataStructs.ConvertToNumpyArray(
+                AllChem.GetMorganFingerprintAsBitVect(mol, radius, nBits=n_bits), arr)
+            return arr
+        return _fp
+
+X_morgan = None
+if "SMILES" in sub.columns:
+    morgan = make_morgan()
+    fps, ok_m = [], []
+    for i, smi in enumerate(sub["SMILES"].tolist()):
+        mol = Chem.MolFromSmiles(smi) if isinstance(smi, str) else None
+        if mol is None:
+            continue
+        fps.append(morgan(mol)); ok_m.append(i)
+    print(f"Morgan FP: {len(fps):,} / {len(sub):,} valid SMILES")
+    if len(fps) >= 1000:
+        X_morgan = np.array(fps, dtype=np.float32)
+        # keep only rows with a valid Morgan FP (same rows for every model)
+        y = y[ok_m]; metals = metals[ok_m]; X3 = X3.iloc[ok_m].reset_index(drop=True)
+        sub = sub.iloc[ok_m].reset_index(drop=True)
+        print(f"Aligned for comparison: {len(y):,} rows")
+else:
+    print("No SMILES column — Morgan baseline skipped (3D-only test).")
+
+# --------------------------------------------------------------------------- #
+# 5. Same models, same splits, 2D vs 3D vs 2D+3D
+# --------------------------------------------------------------------------- #
+def grouped_folds(groups, seed, k):
+    """Size-balanced greedy group -> fold assignment (same as v2 script)."""
+    rng = np.random.default_rng(seed)
+    uniq, counts = np.unique(groups, return_counts=True)
+    sk = np.empty(len(uniq), dtype=[("count", int), ("rand", float)])
+    sk["count"] = -counts; sk["rand"] = rng.random(len(uniq))
+    order = np.argsort(sk, order=("count", "rand"))
+    sizes = np.zeros(k, dtype=int); assign = {}
+    for g, c in zip(uniq[order], counts[order]):
+        f = int(np.argmin(sizes)); assign[g] = f; sizes[f] += c
+    fold_of = np.array([assign[g] for g in groups])
+    folds = [(np.where(fold_of != f)[0], np.where(fold_of == f)[0]) for f in range(k)]
+    for tr, te in folds:
+        assert set(groups[tr]).isdisjoint(set(groups[te])), "Group leakage!"
+    return folds
+
+def oof(factory, X, y, folds):
+    yp = np.full(len(y), np.nan)
+    for tr, te in folds:
+        m = factory(); m.fit(X[tr], y[tr]); yp[te] = m.predict(X[te])
+    return yp
+
+MODELS = {
+    "Random Forest": lambda: RandomForestRegressor(n_estimators=100, max_depth=15, n_jobs=-1, random_state=0),
+    "XGBoost": lambda: XGBRegressor(n_estimators=200, learning_rate=0.05, max_depth=6, tree_method="hist", n_jobs=-1, random_state=0),
+}
+X3v = X3.values.astype(np.float32)
+feature_sets = {"3D only": X3v}
+if X_morgan is not None:
+    feature_sets["Morgan FP (256)"] = X_morgan
+    feature_sets["Morgan + 3D"] = np.hstack([X_morgan, X3v])
+
+folds_random = list(KFold(5, shuffle=True, random_state=SEED).split(np.arange(len(y))))
+folds_grouped = grouped_folds(metals, SEED, 5)
+results = []
+for split, folds in [("random", folds_random), ("grouped", folds_grouped)]:
+    for feat, X in feature_sets.items():
+        for name, fac in MODELS.items():
+            yp = oof(fac, X, y, folds)
+            r = metrics(y, yp)
+            results.append({"Split": split, "Features": feat, "Model": name, **r})
+            print(f"  {split:8s} | {feat:16s} | {name:13s} R2={r['R2']: .3f} RMSE={r['RMSE']:.3f} MAE={r['MAE']:.3f}")
+
+res = pd.DataFrame(results)
+res.to_csv("results_3d_test.csv", index=False)
+print("\n--- DECISION ---")
+g = res[res["Split"] == "grouped"].set_index(["Features", "Model"])["R2"]
+base = float(g.get(("Morgan FP (256)", "Random Forest"), np.nan)) if X_morgan is not None else None
+r3d = float(g[("3D only", "Random Forest")])
+r23 = float(g.get(("Morgan + 3D", "Random Forest"), np.nan)) if X_morgan is not None else np.nan
+print(f"Grouped R2 (Random Forest): Morgan {base if base is not None else 'n/a'} | 3D only {r3d:.3f} | Morgan+3D {r23 if r23==r23 else 'n/a'}")
+print(f"Grouped R2 (XGBoost): 3D only {float(g[('3D only','XGBoost')]):.3f}")
+best3d = max([v for v in [r3d, r23] if v == v])
+if best3d >= 0.35:
+    print("=> REVIVAL IS REAL. 3D geometry lifts transfer well above the 2D ceiling (~0.20). Go for the full run.")
+elif best3d >= 0.25:
+    print("=> PROMISING. 3D helps but not decisively — run the full data to confirm before claiming anything.")
+else:
+    print("=> 3D DOES NOT FIX IT on this test. Do not scale up; the limits-paper path is the honest one.")
+print("\nSaved results_3d_test.csv (in this folder). Paste the table above back to Muse.")

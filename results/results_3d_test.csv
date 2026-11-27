@@ -1,0 +1,25 @@
+Seed,N,Split,Features,Model,R2,RMSE,MAE
+0,4640,random,3D only,Random Forest,0.41,0.681,0.51
+0,4640,random,3D only,XGBoost,0.44,0.664,0.501
+0,4640,random,Morgan FP (256),Random Forest,0.23,0.778,0.589
+0,4640,random,Morgan FP (256),XGBoost,0.253,0.767,0.582
+0,4640,random,Morgan + 3D,Random Forest,0.445,0.661,0.495
+0,4640,random,Morgan + 3D,XGBoost,0.499,0.628,0.473
+0,4640,grouped,3D only,Random Forest,0.038,0.87,0.659
+0,4640,grouped,3D only,XGBoost,0.033,0.872,0.666
+0,4640,grouped,Morgan FP (256),Random Forest,0.107,0.838,0.639
+0,4640,grouped,Morgan FP (256),XGBoost,0.109,0.837,0.64
+0,4640,grouped,Morgan + 3D,Random Forest,0.042,0.868,0.653
+0,4640,grouped,Morgan + 3D,XGBoost,0.126,0.829,0.63
+1,4634,random,3D only,Random Forest,0.409,0.711,0.533
+1,4634,random,3D only,XGBoost,0.429,0.699,0.525
+1,4634,random,Morgan FP (256),Random Forest,0.244,0.804,0.607
+1,4634,random,Morgan FP (256),XGBoost,0.275,0.787,0.595
+1,4634,random,Morgan + 3D,Random Forest,0.452,0.685,0.513
+1,4634,random,Morgan + 3D,XGBoost,0.507,0.649,0.489
+1,4634,grouped,3D only,Random Forest,0.124,0.866,0.653
+1,4634,grouped,3D only,XGBoost,0.161,0.847,0.636
+1,4634,grouped,Morgan FP (256),Random Forest,0.139,0.858,0.654
+1,4634,grouped,Morgan FP (256),XGBoost,0.126,0.865,0.662
+1,4634,grouped,Morgan + 3D,Random Forest,0.166,0.845,0.639
+1,4634,grouped,Morgan + 3D,XGBoost,0.258,0.797,0.608
