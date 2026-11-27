@@ -31,12 +31,14 @@ transfer to unseen metals.
 - **The honest screening numbers are the structure-only ones** (RDKit 2D
   descriptors, Morgan fingerprints). They are no better: RDKit 2D Random
   Forest reaches R² 0.379 random / 0.149 grouped.
-- **Morgan-fingerprint results are not in this bundle.** An earlier version of
-  this README quoted Morgan FP numbers (R² 0.386 random / 0.201 grouped), but
-  no Morgan results table survives in the uploaded files — only the feature
-  file (`X_morgan.parquet`, 1024 bits, not included here). Those numbers are
-  therefore **not** repeated below. If the Morgan results table turns up, it
-  can be added back with its source file.
+- **Morgan-fingerprint results are verified — by a fresh rerun.** The
+  earlier version of this README quoted Morgan FP numbers (R² 0.386 random /
+  0.201 grouped) with no source table in the bundle, so they were removed.
+  On 2026-11-27 the pipeline was rerun end-to-end and reproduced those
+  numbers to within 0.001 (see `results/results_cv_reproduced.csv`). The
+  Morgan table is therefore restored below. Note the rerun used **256-bit**
+  fingerprints; the surviving `X_morgan.parquet` is 1024-bit from a
+  different run and is not the file this table used.
 - **Two unit systems are mixed in the files.** `benchmark_results.csv` and
   `results_cv.csv` report errors in **eV**; `model_results.csv` reports the
   same runs with the target in **Hartree** (RMSE ≈ 0.027 Ha ≈ 0.75 eV).
@@ -76,7 +78,45 @@ seeds is in brackets).
 | xTB-only | Random Forest | −0.200 | 1.004 | 0.781 |
 | xTB-only | XGBoost | 0.031 | 0.902 | 0.698 |
 
-### Cross-validation summary (from `results/results_cv.csv`)
+### 5-fold cross-validation, rerun 2026-11-27 (from `results/results_cv_reproduced.csv`)
+
+Aligned set: 100,831 complexes with valid SMILES, known metals only, 30
+metals, median gap 2.98 eV. Random = 5-fold KFold; grouped = 5-fold
+GroupKFold by metal. Morgan fingerprints are 256-bit here. The mean baseline
+scores R² 0.000 (random) and −0.006 (grouped).
+
+| Split | Features | Model | R² | RMSE (eV) | MAE (eV) |
+|---|---|---|---|---|---|
+| random | 5 scalars | Ridge | 0.082 | 0.869 | 0.666 |
+| random | 5 scalars | Random Forest | 0.299 | 0.759 | 0.579 |
+| random | 5 scalars | XGBoost | 0.271 | 0.774 | 0.595 |
+| random | RDKit 2D | Ridge | 0.116 | 0.853 | 0.659 |
+| random | RDKit 2D | Random Forest | 0.309 | 0.754 | 0.571 |
+| random | RDKit 2D | XGBoost | 0.271 | 0.774 | 0.592 |
+| random | Morgan FP (256) | Ridge | 0.256 | 0.782 | 0.597 |
+| random | Morgan FP (256) | Random Forest | **0.386** | 0.711 | 0.527 |
+| random | Morgan FP (256) | XGBoost | 0.374 | 0.718 | 0.537 |
+| grouped (by metal) | 5 scalars | Ridge | 0.032 | 0.892 | 0.684 |
+| grouped (by metal) | 5 scalars | Random Forest | 0.096 | 0.862 | 0.664 |
+| grouped (by metal) | 5 scalars | XGBoost | 0.118 | 0.851 | 0.655 |
+| grouped (by metal) | RDKit 2D | Ridge | 0.056 | 0.881 | 0.681 |
+| grouped (by metal) | RDKit 2D | Random Forest | 0.143 | 0.840 | 0.641 |
+| grouped (by metal) | RDKit 2D | XGBoost | 0.147 | 0.838 | 0.641 |
+| grouped (by metal) | Morgan FP (256) | Ridge | 0.134 | 0.844 | 0.650 |
+| grouped (by metal) | Morgan FP (256) | Random Forest | 0.184 | 0.819 | 0.623 |
+| grouped (by metal) | Morgan FP (256) | XGBoost | **0.201** | 0.811 | 0.617 |
+
+This rerun reproduces the numbers the old README reported to within 0.001
+on every row — that is why the Morgan table is back. Note these numbers
+differ from the older `results_cv.csv` table (5 scalars RF 0.330, RDKit RF
+0.379): that file comes from a different run with different model settings,
+and both are kept in `results/` with their sources documented. Do not mix
+the two tables.
+
+### Older cross-validation summary (from `results/results_cv.csv`)
+
+Kept for completeness; a different run from the table above (see
+`docs/tmqm_benchmark_report.md`).
 
 | Split | Features | Model | N | R² | RMSE (eV) |
 |---|---|---|---|---|---|
@@ -177,7 +217,8 @@ regenerate them with the pipeline.
 ├── requirements.txt
 ├── results/
 │   ├── benchmark_results.csv       # 80/20 splits, seeds 42/123/2024, eV
-│   ├── results_cv.csv              # Random + grouped CV summary, eV
+│   ├── results_cv.csv              # Older CV summary, eV (different run)
+│   ├── results_cv_reproduced.csv   # 5-fold CV rerun 2026-11-27, eV (Morgan 256-bit)
 │   ├── model_results.csv           # Same runs as benchmark_results, in Hartree
 │   ├── model_summary.csv           # Mean ± std over seeds
 │   ├── feature_importance.csv      # RF importances (5 DFT scalars)

@@ -47,7 +47,52 @@ files support.
 - `feature_importance.csv` sums to 1.0 and its ranking (Metal_q first) is
   consistent with the SHAP figure's story.
 
+## Reproduction — the old README's numbers were real (2026-11-27)
+
+**Correction to this report's earlier claim:** the previous README's
+random/grouped tables were described above as coming "from different runs"
+with the Morgan numbers having "no source table". That was wrong. On
+2026-11-27 the pipeline was rerun end-to-end and reproduced the old README's
+numbers to within **0.0011 on every row** (largest diff: RDKit RF random
+0.3074 → 0.3085; 5-scalar RF grouped 0.0946 → 0.0957; Morgan XGB grouped
+0.2009 → 0.2009 exactly). The old README was a faithful record of this
+pipeline. The Morgan table has been restored in the README, sourced from the
+rerun (`results/results_cv_reproduced.csv`, transcribed from the pasted run
+output).
+
+What the rerun also established:
+
+- Data: 108,541 rows loaded, all with scalars and HL_Gap. Metals read from
+  3 xyz files (not from the SMILES regex in `run_pipeline.py` — this rerun
+  used a different, newer script; see the code-audit note below).
+- Featurisation: 100,831 ok, 7,710 SMILES missing/unparseable, 0 descriptor
+  failures. Final aligned set: 100,831 complexes, 30 metals, median gap
+  2.98 eV.
+- Filtering shifts the metal mix: max share shift 0.0028, but the
+  least-retained metal keeps only **27.3%** of its rows (La — matches the
+  earlier audit note), chi² = 3666.5, p = 0.0. The grouped results therefore
+  rest on a filtered set in which some metals are heavily thinned.
+- Metal labels validated: xyz vs RDKit-mol disagreement **0 / 100,831** —
+  the metal assignment is trustworthy, which answers the fragility concern
+  raised about `extract_metal()` in the code audit.
+- The summary table's `R2_std = 0.0` on every row is an artifact: the scores
+  come from one pooled `cross_val_predict` pass, so there is no per-fold
+  spread to report. Do not quote a spread from this table.
+- The rerun's LOMO section ("LOMO on 30 metals, min N=100, skipped: []")
+  was cut off in the pasted output — per-metal LOMO numbers from this run
+  are not yet on file. The per-metal figure values (Hg −0.77, Ag −0.70,
+  Mn 0.35, median −0.048) still rest on the figure alone.
+- **The rerun script is not `run_pipeline.py`.** It reads metals from xyz
+  files, runs a Mean baseline and Ridge, and has a LOMO section — none of
+  which exist in the repo's script. The reproduction gap stands until that
+  script (or notebook) is added to the repo.
+
 ## Mismatches found — the old README's tables do not come from these files
+
+**[CORRECTED 2026-11-27 — see the Reproduction section above. The rerun
+reproduced these numbers to within 0.0011, so the old README was right and
+the Morgan table is restored in the README. What follows is the original
+note, kept for the record.]**
 
 The previous README reported a random-CV table (5 scalars RF 0.2983, RDKit RF
 0.3074, Morgan RF 0.3860) and a GroupKFold table (5 scalars RF 0.0946, RDKit
@@ -59,7 +104,10 @@ only the numbers in `results/` and drops the Morgan table.
 
 ## What is missing from the bundle
 
-- Morgan-fingerprint results table (features exist, results do not).
+- Morgan-fingerprint results table — **resolved 2026-11-27**: the rerun
+  reproduced the Morgan numbers and they are now in
+  `results/results_cv_reproduced.csv` (256-bit). The surviving
+  `X_morgan.parquet` (1024-bit) is still from a different run.
 - Per-metal results table (only the figure survives).
 - xTB feature file (the `xTB_only` rows cannot be reproduced from here).
 - Leave-one-metal-out results table (the old audit noted a 16-metal file;

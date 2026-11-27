@@ -1,0 +1,25 @@
+Split,Features,Model,R2,RMSE,MAE
+random_known,5 Scalars,Mean baseline,-0.0000,0.9067,0.7017
+random_known,5 Scalars,Ridge,0.0822,0.8686,0.6661
+random_known,5 Scalars,Random Forest,0.2985,0.7594,0.5786
+random_known,5 Scalars,XGBoost,0.2711,0.7741,0.5949
+random_known,RDKit 2D,Mean baseline,-0.0000,0.9067,0.7017
+random_known,RDKit 2D,Ridge,0.1159,0.8525,0.6594
+random_known,RDKit 2D,Random Forest,0.3085,0.7540,0.5712
+random_known,RDKit 2D,XGBoost,0.2712,0.7740,0.5916
+random_known,Morgan FP (256),Mean baseline,-0.0000,0.9067,0.7017
+random_known,Morgan FP (256),Ridge,0.2564,0.7818,0.5972
+random_known,Morgan FP (256),Random Forest,0.3855,0.7108,0.5266
+random_known,Morgan FP (256),XGBoost,0.3735,0.7176,0.5371
+grouped,5 Scalars,Mean baseline,-0.0060,0.9094,0.7040
+grouped,5 Scalars,Ridge,0.0317,0.8922,0.6842
+grouped,5 Scalars,Random Forest,0.0957,0.8622,0.6640
+grouped,5 Scalars,XGBoost,0.1183,0.8514,0.6550
+grouped,RDKit 2D,Mean baseline,-0.0060,0.9094,0.7040
+grouped,RDKit 2D,Ridge,0.0561,0.8809,0.6807
+grouped,RDKit 2D,Random Forest,0.1427,0.8395,0.6412
+grouped,RDKit 2D,XGBoost,0.1465,0.8377,0.6411
+grouped,Morgan FP (256),Mean baseline,-0.0060,0.9094,0.7040
+grouped,Morgan FP (256),Ridge,0.1341,0.8437,0.6501
+grouped,Morgan FP (256),Random Forest,0.1841,0.8190,0.6227
+grouped,Morgan FP (256),XGBoost,0.2009,0.8105,0.6168

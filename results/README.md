@@ -6,7 +6,8 @@ All files in this folder are the verified result tables from the tmQM runs
 | File | Rows | What it is |
 |---|---|---|
 | `benchmark_results.csv` | 24 + header | 80/20 random splits, seeds 42 / 123 / 2024. Feature sets `DFT_assisted` and `xTB_only`; models Dummy / Ridge / RandomForest / XGBoost. Errors in **eV**. Train 86,832 / test 21,709. |
-| `results_cv.csv` | 16 + header | Cross-validation summary: `random` and `grouped` (by metal) splits × `5 Scalars` / `RDKit 2D` × 4 models. Errors in **eV**. |
+| `results_cv.csv` | 16 + header | Older cross-validation summary: `random` and `grouped` (by metal) splits × `5 Scalars` / `RDKit 2D` × 4 models. Errors in **eV**. A different run from `results_cv_reproduced.csv` — do not mix them. |
+| `results_cv_reproduced.csv` | 24 + header | 5-fold CV rerun of 2026-11-27 (pasted run output): `random_known` and `grouped` × `5 Scalars` / `RDKit 2D` / `Morgan FP (256)` × Mean baseline / Ridge / Random Forest / XGBoost. Aligned set, 100,831 rows. Errors in **eV**. This is the run that reproduces the old README's numbers. |
 | `model_results.csv` | 12 + header | The same runs as `benchmark_results.csv` (same R²), but with the target in **Hartree** — so RMSE ≈ 0.027 Ha and MAE ≈ 0.021 Ha instead of ≈ 0.75 / 0.56 eV. Do not mix the two unit systems. |
 | `model_summary.csv` | 4 + header | Mean ± std of `model_results.csv` over the three seeds (Hartree units). |
 | `feature_importance.csv` | 5 + header | Random Forest importances for the 5 DFT scalars. They sum to 1.0. |
