@@ -116,6 +116,50 @@ only the numbers in `results/` and drops the Morgan table.
   (whether "random" is 5-fold CV or a single split is not recorded in the
   file).
 
+## Code audit — v2 script `tmqm_metal_ood_benchmark.py` (626 lines, checked 2026-11-27)
+
+This is the script Muhammad ran on 2026-11-27, saved to the repo before it
+could be lost with the Colab runtime. It compiles cleanly and it produces
+the pasted run output line for line: the "Loaded 108,541 rows" line, the
+featurisation counts (100,831 ok / 7,710 bad / 0 failures), the metal-bias
+JSON, the 0/100,831 label disagreement, the CV print format and the summary
+table all match the code paths exactly.
+
+Findings:
+
+- **The run used a single seed.** The summary's `R2_std = 0.0` on every row
+  is the tell: with one seed, pandas' std is NaN and `summarise()` fills it
+  with 0.0 (verified by direct test). The rerun was `--seeds 1`, not the
+  default 3. The old README's numbers are single-seed too, which is part of
+  why they match so closely. Rerun with `--seeds 3` for a real spread.
+- **Grouped folds are custom, not sklearn GroupKFold.** `grouped_folds()`
+  sorts metals by size (largest first, random tie-break) and assigns each to
+  the least-loaded fold. Tested on synthetic data: folds are disjoint (the
+  in-code assertion holds), cover all rows, and stay within roughly a factor
+  of two in size — but the biggest metals each occupy a fold almost alone
+  (e.g. Fe alone in one fold). That is a property of greedy packing, not a
+  bug; it is documented here because the grouped numbers depend on it.
+- **The LOMO results and v2 figures from the 2026-11-27 run are lost.**
+  The script writes `per_metal_results.csv` and the figures only after LOMO
+  finishes, and `--out-dir` defaulted to the runtime's disk. The pasted
+  output stops at the LOMO header, so the run died during or just after
+  LOMO. What survives is the printed CV output (transcribed into
+  `results/results_cv_reproduced.csv`) — nothing else from that run.
+- **The figures in the old bundle are from the earlier script, not v2.**
+  Proof: the bundle's `parity_plot_final.png` is 1500×1500 (single panel,
+  as `run_pipeline.py` makes), while v2's `fig_parity` makes a 3000×1500
+  two-panel figure; and the bundle's `per_metal_r2.png` shows 29 metals
+  with no N labels, while v2's `fig_per_metal` plots all 30 (min N=100,
+  nothing skipped) with N printed under each bar. The v2 figures
+  (`cv_comparison.png` included) were never saved anywhere.
+- Everything else checks out: metal labels come from the xyz headers with
+  a MolFromSmiles cross-check (0 disagreements); the bias check, the
+  chi-square test and the `results_table.md` writer all do what they claim;
+  `parse_known_args` correctly absorbs Colab's `-f` flags. (The
+  scikit-learn ≥ 1.4 pin in `requirements.txt` is needed by the older
+  `run_pipeline.py`, which imports `root_mean_squared_error`; the v2 script
+  itself only uses `mean_squared_error`.)
+
 ## Code audit — `run_pipeline.py` (287 lines, checked 2026-11-27)
 
 The code is clean and readable, it compiles, and the grouped-CV leakage

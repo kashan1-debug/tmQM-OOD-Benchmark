@@ -193,27 +193,40 @@ manifold (scaled kNN distance).*
 
 ## Reproducing the results
 
+The script that produced the 5-fold CV tables is
+**`tmqm_metal_ood_benchmark.py`** (v2, saved in this repo). Run it with the
+output pointed at a folder that survives (see the warning below):
+
 ```bash
 pip install -r requirements.txt
-python run_pipeline.py
+python tmqm_metal_ood_benchmark.py --seeds 1 --out-dir results_v2_run
 ```
 
-`run_pipeline.py` is the cleaned pipeline for the 5-fold CV part (random +
-grouped, 5 scalars / RDKit 2D / 256-bit Morgan FP, aligned on the common
-valid index). **It does not reproduce the tables in `results/` exactly:**
-the 80/20 benchmark tables (`benchmark_results.csv`, `model_results.csv`,
-`rf_predictions.csv`) and the `xTB_only` rows come from earlier Colab runs
-whose script is not in this repo, and `results_cv.csv` was run on the full
-108,541-row set while this pipeline aligns to the ~100,831-row common index.
-The pipeline also uses 256-bit Morgan fingerprints, while the surviving
-feature file is 1024-bit. See `docs/tmqm_benchmark_report.md` for the full
-code audit. The large feature files (parquet) are not in this repo —
-regenerate them with the pipeline.
+The rerun of 2026-11-27 used a single seed (`--seeds 1`) — that is why the
+summary table's std columns are all 0.0. For a real spread, rerun with
+`--seeds 3` (the default).
+
+> **Do not lose the next run.** The 2026-11-27 run's files died with the
+> Colab runtime: the script writes its outputs only to `--out-dir`, and the
+> default is the runtime's own disk. Point `--out-dir` at your Drive folder
+> (e.g. `--out-dir /content/drive/MyDrive/tmqm/results_v2`) so the tables,
+> the LOMO file and the figures survive even if the runtime disconnects.
+> The LOMO results and the v2 figures from the 2026-11-27 run are already
+> lost — only the printed CV output survived, which is what
+> `results/results_cv_reproduced.csv` was transcribed from.
+
+`run_pipeline.py` is the earlier, cleaned pipeline (5-fold CV only, SMILES
+regex for metals, sklearn GroupKFold). It does **not** produce the tables in
+`results/` — see the code audit in `docs/tmqm_benchmark_report.md`. The
+80/20 benchmark tables (`benchmark_results.csv`, `model_results.csv`,
+`rf_predictions.csv`) and the `xTB_only` rows come from even earlier Colab
+runs whose script is not in this repo.
 
 ## Files
 
 ```
-├── run_pipeline.py          # Pipeline code
+├── tmqm_metal_ood_benchmark.py  # v2 pipeline — produced results_cv_reproduced.csv
+├── run_pipeline.py              # Earlier pipeline (CV only; does not reproduce the tables)
 ├── requirements.txt
 ├── results/
 │   ├── benchmark_results.csv       # 80/20 splits, seeds 42/123/2024, eV
