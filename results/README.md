@@ -13,6 +13,11 @@ All files in this folder are the verified result tables from the tmQM runs
 | `model_summary.csv` | 4 + header | Mean ± std of `model_results.csv` over the three seeds (Hartree units). |
 | `feature_importance.csv` | 5 + header | Random Forest importances for the 5 DFT scalars. They sum to 1.0. |
 | `rf_predictions.csv` | 21,709 + header | Random Forest actual vs predicted gap, in **eV**, for the test split. |
+| `results_all_runs.csv` | 72 + header | Final 3-seed CV run of 2026-11-27 (Colab): `random_known` and `grouped` × `5 Scalars` / `RDKit 2D` / `Morgan FP (256)` × Mean baseline / Ridge / Random Forest / XGBoost × seeds 0–2. Errors in **eV**. |
+| `results_final.csv` | 24 + header | Mean ± std over the 3 seeds of `results_all_runs.csv`. Errors in **eV**. |
+| `results_table.md` | — | The same 3-seed summary as Markdown. |
+| `per_metal_results.csv` | 120 + header | Leave-one-metal-out, final run of 2026-11-27: 30 metals × Mean baseline / Ridge / Random Forest / XGBoost, 5-scalar features only, min N = 100. Errors in **eV**. Median R²: Random Forest −0.025, XGBoost −0.012. |
+| `metal_distribution_check.csv` | 30 + header | Metal counts before/after SMILES filtering for the final run (La retained only 27.3%). |
 
 ## Units
 
@@ -23,9 +28,7 @@ All files in this folder are the verified result tables from the tmQM runs
 
 ## Known gaps in this bundle
 
-- No per-metal results table (the leave-one-metal-out values in the README
-  are read from `per_metal_r2.png`). A full `--seeds 3` rerun is in progress
-  (2026-11-27) and will supply it.
+- Per-metal results table supplied 2026-11-27 (`per_metal_results.csv`, 120 rows). The parity figure (`parity_plot_final.png`) was not recovered — the seed-0 out-of-fold predictions it needs were never saved.
 - No xTB feature file (the `xTB_only` rows in `benchmark_results.csv` cannot
   be reproduced from the files here).
 - `model_results_progress.csv` and `model_performance_summary.csv` from the

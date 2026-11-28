@@ -8,19 +8,20 @@
 **Status:** limits paper in preparation. This repo is the benchmark behind
 that paper: every route tried so far fails to transfer to unseen metals, and
 the numbers below are the verified evidence. The full 3-seed rerun of the
-main pipeline is in progress (see "Reproducing the results").
+main pipeline finished on 2026-11-27 (see "Reproducing the results").
 
 ## Core finding
 
 Non-spatial models barely predict the tmQM HOMO–LUMO gap, even when they are
-given help. The best model (Random Forest) reaches **R² ≈ 0.33–0.38 on a random
-split** and collapses to **R² ≈ 0.07–0.15 on grouped (by-metal) splits**. Under
-leave-one-metal-out, the median metal scores **R² = −0.048** — worse than
-predicting the mean. Cheap xTB-only features fail outright (R² ≈ 0.03, Random
-Forest −0.20). Adding simple 3D geometry helps on random splits (R² 0.44) but
-does **not** fix transfer to new metals (grouped R² 0.03–0.16 across two
-independent samples). The gap is not predictable from these inputs, and it
-does not transfer to unseen metals.
+given help. The best model (Random Forest on Morgan fingerprints) reaches
+**R² = 0.387 on a random split** and collapses to **R² = 0.184 on grouped
+(by-metal) splits** (3-seed means; full table below). Under
+leave-one-metal-out, the median metal scores **R² = −0.025** (Random Forest;
+XGBoost −0.012) — worse than predicting the mean. Cheap xTB-only features
+fail outright (R² ≈ 0.03, Random Forest −0.20). Adding simple 3D geometry
+helps on random splits (R² 0.44) but does **not** fix transfer to new metals
+(grouped R² 0.03–0.16 across two independent samples). The gap is not
+predictable from these inputs, and it does not transfer to unseen metals.
 
 ## Read this first — what the numbers do and do not mean
 
@@ -116,6 +117,40 @@ differ from the older `results_cv.csv` table (5 scalars RF 0.330, RDKit RF
 and both are kept in `results/` with their sources documented. Do not mix
 the two tables.
 
+### 5-fold cross-validation, FINAL 3-seed run 2026-11-27 (from `results/results_all_runs.csv` and `results/results_final.csv`)
+
+The full run: seeds 0, 1, 2, 5-fold, aligned set 100,831 complexes, 30
+metals. Values are the mean over the 3 seeds (± std). This table supersedes
+the single-seed rerun above — its seed-0 values agree with these means to
+within 0.001 on every row.
+
+| Split | Features | Model | R² (mean ± std) | RMSE (eV) | MAE (eV) |
+|---|---|---|---|---|---|
+| random | 5 scalars | Mean baseline | −0.000 ± 0.000 | 0.907 | 0.702 |
+| random | 5 scalars | Ridge | 0.082 ± 0.000 | 0.869 | 0.666 |
+| random | 5 scalars | Random Forest | 0.299 ± 0.000 | 0.759 | 0.579 |
+| random | 5 scalars | XGBoost | 0.271 ± 0.000 | 0.774 | 0.595 |
+| random | RDKit 2D | Mean baseline | −0.000 ± 0.000 | 0.907 | 0.702 |
+| random | RDKit 2D | Ridge | 0.116 ± 0.000 | 0.853 | 0.659 |
+| random | RDKit 2D | Random Forest | 0.307 ± 0.001 | 0.755 | 0.572 |
+| random | RDKit 2D | XGBoost | 0.271 ± 0.001 | 0.774 | 0.592 |
+| random | Morgan FP (256) | Mean baseline | −0.000 ± 0.000 | 0.907 | 0.702 |
+| random | Morgan FP (256) | Ridge | 0.256 ± 0.000 | 0.782 | 0.597 |
+| random | Morgan FP (256) | Random Forest | 0.387 ± 0.001 | 0.710 | 0.526 |
+| random | Morgan FP (256) | XGBoost | 0.373 ± 0.001 | 0.718 | 0.537 |
+| grouped (by metal) | 5 scalars | Mean baseline | −0.006 ± 0.000 | 0.909 | 0.704 |
+| grouped (by metal) | 5 scalars | Ridge | 0.032 ± 0.000 | 0.892 | 0.684 |
+| grouped (by metal) | 5 scalars | Random Forest | 0.095 ± 0.002 | 0.863 | 0.664 |
+| grouped (by metal) | 5 scalars | XGBoost | 0.118 ± 0.000 | 0.851 | 0.655 |
+| grouped (by metal) | RDKit 2D | Mean baseline | −0.006 ± 0.000 | 0.909 | 0.704 |
+| grouped (by metal) | RDKit 2D | Ridge | 0.056 ± 0.000 | 0.881 | 0.681 |
+| grouped (by metal) | RDKit 2D | Random Forest | 0.143 ± 0.000 | 0.839 | 0.641 |
+| grouped (by metal) | RDKit 2D | XGBoost | 0.146 ± 0.000 | 0.838 | 0.641 |
+| grouped (by metal) | Morgan FP (256) | Mean baseline | −0.006 ± 0.000 | 0.909 | 0.704 |
+| grouped (by metal) | Morgan FP (256) | Ridge | 0.134 ± 0.000 | 0.844 | 0.650 |
+| grouped (by metal) | Morgan FP (256) | Random Forest | 0.184 ± 0.001 | 0.819 | 0.623 |
+| grouped (by metal) | Morgan FP (256) | XGBoost | 0.201 ± 0.000 | 0.811 | 0.617 |
+
 ### Older cross-validation summary (from `results/results_cv.csv`)
 
 Kept for completeness; a different run from the table above (see
@@ -142,11 +177,51 @@ SMILES); RDKit runs use the 100,831 rows with valid SMILES. The grouped
 different pipeline stages, so treat the two tables as two recorded runs, not
 one perfectly matched experiment. See `docs/tmqm_benchmark_report.md`.
 
-### Leave-one-metal-out (XGBoost, from `per_metal_r2.png`)
+### Leave-one-metal-out (from `results/per_metal_results.csv`)
 
-Median R² over held-out metals: **−0.048**. Worst: Hg ≈ −0.77, Ag ≈ −0.70,
-Au ≈ −0.56. Best: Mn ≈ 0.35. These values are read from the figure — no
-per-metal results table survives in this bundle.
+Full run, 2026-11-27: 30 metals × 4 models = 120 rows, 5-scalar features
+only, min N = 100. Median R² over held-out metals: **Random Forest −0.025,
+XGBoost −0.012, Ridge −0.026, mean baseline −0.090**. Only 13 of 30 metals
+score above zero with Random Forest. Best: Mn 0.35 (RF) / 0.38 (XGBoost).
+Worst: Ag −0.73 (RF), Hg −0.77 (XGBoost), Au −0.53 (RF).
+
+> Correction: an earlier version of this README quoted a median of −0.048,
+> read from the old `per_metal_r2.png`. The verified rerun gives −0.025
+> (Random Forest). The conclusion is unchanged — the median metal is still
+> below zero — but the number is now from the table, not the figure.
+
+| Metal | N | R² (Random Forest) |
+|---|---|---|
+| Mn | 2112 | 0.346 |
+| Fe | 5045 | 0.244 |
+| Tc | 283 | 0.207 |
+| Os | 1224 | 0.121 |
+| W | 3199 | 0.120 |
+| Ir | 4695 | 0.105 |
+| Rh | 4278 | 0.089 |
+| Re | 4033 | 0.083 |
+| Pt | 7853 | 0.038 |
+| Pd | 10161 | 0.023 |
+| Co | 3450 | 0.019 |
+| Nb | 516 | 0.004 |
+| Mo | 3868 | 0.000 |
+| V | 1380 | −0.020 |
+| La | 116 | −0.024 |
+| Ru | 9067 | −0.027 |
+| Hf | 572 | −0.059 |
+| Cd | 1643 | −0.078 |
+| Ta | 740 | −0.084 |
+| Y | 817 | −0.115 |
+| Cu | 3528 | −0.123 |
+| Zr | 2640 | −0.130 |
+| Cr | 2033 | −0.147 |
+| Ni | 10030 | −0.217 |
+| Sc | 459 | −0.243 |
+| Zn | 7043 | −0.270 |
+| Ti | 3131 | −0.314 |
+| Au | 4099 | −0.531 |
+| Hg | 1148 | −0.675 |
+| Ag | 1668 | −0.728 |
 
 ### 3D geometry test (2026-11-27, from `results/results_3d_test.csv`)
 
@@ -207,7 +282,9 @@ credit, which is the oracle problem in one table:
 
 *The model fails to predict extreme gaps (> 5 eV) and collapses to the mean.*
 
-![Parity Plot](parity_plot_final.png)
+> Figure not available: the parity plot could not be regenerated because
+> the seed-0 out-of-fold predictions it needs were never saved (the Colab
+> runtime ended during the LOMO stage). The CV tables above are unaffected.
 
 ### 3. SHAP feature importance
 
@@ -225,8 +302,9 @@ manifold (scaled kNN distance).*
 
 ### 5. Leave-one-metal-out analysis
 
-*The model catastrophically fails on unseen metals like Hg (R² = −0.77) and Ag
-(R² = −0.70), while maintaining some accuracy on Mn (R² = 0.35).*
+*The model catastrophically fails on unseen metals like Hg (R² = −0.77,
+XGBoost) and Ag (R² = −0.73, Random Forest), while maintaining some accuracy
+on Mn (R² = 0.35, Random Forest).*
 
 ![Per-Metal Breakdown](per_metal_r2.png)
 
@@ -241,12 +319,13 @@ pip install -r requirements.txt
 python tmqm_metal_ood_benchmark.py --seeds 1 --out-dir results_v2_run
 ```
 
-The rerun of 2026-11-27 used a single seed (`--seeds 1`) — that is why the
-summary table's std columns are all 0.0. For a real spread, rerun with
-`--seeds 3` (the default). **A full `--seeds 3` rerun is in progress
-(2026-11-27, run on a local machine so the outputs survive); its tables,
-LOMO file and figures will replace the lost 2026-11-27 run's outputs when it
-finishes.**
+The final run of 2026-11-27 used `--seeds 3` (all three seeds) in Colab.
+The CV tables survived on Drive; the runtime ended during the LOMO stage,
+so the LOMO table and figures were recovered afterwards on a second machine
+from the saved featurisation checkpoint, running the same v2 functions one
+metal at a time with per-metal checkpoints — the per-metal values are
+identical to what the single-call LOMO would have produced. The earlier
+single-seed rerun (seed 0) is the `results_cv_reproduced.csv` table above.
 
 The 3D test is a separate single cell, `colab_3d_test_paste.txt` — paste it
 into one Colab cell and run it. It needs no Drive mount: it clones the tmQM
@@ -254,14 +333,14 @@ repo itself, samples 5,000 complexes, builds the 3D features and the Morgan
 baseline, and prints the comparison plus the decision. Its two runs are in
 `results/results_3d_test.csv`.
 
-> **Do not lose the next run.** The 2026-11-27 run's files died with the
-> Colab runtime: the script writes its outputs only to `--out-dir`, and the
-> default is the runtime's own disk. Point `--out-dir` at your Drive folder
-> (e.g. `--out-dir /content/drive/MyDrive/tmqm/results_v2`) so the tables,
-> the LOMO file and the figures survive even if the runtime disconnects.
-> The LOMO results and the v2 figures from the 2026-11-27 run are already
-> lost — only the printed CV output survived, which is what
-> `results/results_cv_reproduced.csv` was transcribed from.
+> **Do not lose the next run.** The 2026-11-27 Colab run's runtime ended
+> during LOMO: the CV tables survived on Drive, but the LOMO file and
+> figures did not — they were recovered afterwards from the saved features
+> checkpoint on a second machine. The one thing that could not be recovered
+> is the parity figure: it needs seed-0 out-of-fold predictions, which were
+> never saved. Point `--out-dir` at your Drive folder (e.g. `--out-dir
+> /content/drive/MyDrive/tmqm/results_v2`) so the tables survive even if the
+> runtime disconnects.
 
 `run_pipeline.py` is the earlier, cleaned pipeline (5-fold CV only, SMILES
 regex for metals, sklearn GroupKFold). It does **not** produce the tables in
@@ -281,6 +360,11 @@ runs whose script is not in this repo.
 │   ├── benchmark_results.csv       # 80/20 splits, seeds 42/123/2024, eV
 │   ├── results_cv.csv              # Older CV summary, eV (different run)
 │   ├── results_cv_reproduced.csv   # 5-fold CV rerun 2026-11-27, eV (Morgan 256-bit)
+│   ├── results_all_runs.csv        # Final 3-seed CV run 2026-11-27, 72 rows
+│   ├── results_final.csv           # Final 3-seed CV means ± std, 24 rows
+│   ├── results_table.md            # Final 3-seed CV summary as Markdown
+│   ├── per_metal_results.csv       # Leave-one-metal-out, 30 metals × 4 models, 120 rows
+│   ├── metal_distribution_check.csv # Metal counts before/after SMILES filtering, 30 rows
 │   ├── results_3d_test.csv         # 3D test, 2 seeds × 12 rows, eV
 │   ├── model_results.csv           # Same runs as benchmark_results, in Hartree
 │   ├── model_summary.csv           # Mean ± std over seeds

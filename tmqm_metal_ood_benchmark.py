@@ -587,8 +587,14 @@ def main():
     lomo_feats = [name_map[x.strip()] for x in args.lomo_features.split(",") if x.strip() in name_map]
     lomo, ad_lomo = leave_one_metal_out(feature_sets, y, metal, lomo_feats, args.min_metal_n)
     lomo.to_csv(out("per_metal_results.csv"), index=False)
-    med = lomo.groupby(["Features", "Model"])["R2"].median().round(3)
-    print("Median per-metal R2:\n", med.to_string())
+    if lomo.empty:
+        # No metal reached min N (e.g. --quick with a small sample): the
+        # groupby below would raise KeyError: 'Features'. The empty file is
+        # already written; just report it and carry on.
+        print("Median per-metal R2: (no metals passed min N — LOMO empty)")
+    else:
+        med = lomo.groupby(["Features", "Model"])["R2"].median().round(3)
+        print("Median per-metal R2:\n", med.to_string())
 
     print("\n=== Figures ===")
     fig_gap_distribution(y, out("gap_distribution.png"))
